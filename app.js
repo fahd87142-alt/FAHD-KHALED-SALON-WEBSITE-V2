@@ -1,6 +1,7 @@
 // =====================================
 // FAHD KHALED SALON
 // Firebase + Booking + Admin + Loyalty
+// Phone-Based Loyalty + Safe Deletion
 // =====================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
@@ -16,7 +17,9 @@ import {
   doc,
   updateDoc,
   getDoc,
-  setDoc
+  setDoc,
+  runTransaction,
+  deleteDoc
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 import {
@@ -26,7 +29,10 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
 
+// =====================================
 // Firebase Configuration
+// =====================================
+
 const firebaseConfig = {
   apiKey: "AIzaSyByJ4mvTV4KwesCtd_9DZUCxmU8L_L7pvc",
   authDomain: "fahd-khaled-salon-website.firebaseapp.com",
@@ -89,13 +95,24 @@ function normalizeName(name) {
     .toLowerCase();
 }
 
-// إنشاء معرف ثابت من الاسم ورقم الهاتف
-async function createCustomerId(name, phone) {
+// المعرف القديم: الاسم + الهاتف
+async function createLegacyCustomerId(name, phone) {
   const identity =
     normalizeName(name) + "|" + normalizePhone(phone);
 
   const bytes = new TextEncoder().encode(identity);
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
 
+  return Array.from(new Uint8Array(hash))
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+// المعرف الجديد: رقم الهاتف فقط
+async function createCustomerId(phone) {
+  const identity = normalizePhone(phone);
+
+  const bytes = new TextEncoder().encode(identity);
   const hash = await crypto.subtle.digest("SHA-256", bytes);
 
   return Array.from(new Uint8Array(hash))
@@ -149,9 +166,13 @@ form?.addEventListener("submit", async event => {
     createdAt: serverTimestamp()
   };
 
-  if (booking.name.length < 2 || booking.phone.length < 7) {
+  if (
+    booking.name.length < 2 ||
+    normalizePhone(booking.phone).length < 7
+  ) {
     if (message) {
-      message.textContent = "راجع الاسم ورقم الموبايل من فضلك.";
+      message.textContent =
+        "راجع الاسم ورقم الموبايل من فضلك.";
     }
     return;
   }
@@ -190,6 +211,7 @@ form?.addEventListener("submit", async event => {
 
 // =====================================
 // نظام استعلام العميل عن زياراته
+// البحث برقم الهاتف فقط
 // =====================================
 
 const loyaltyForm = document.getElementById("loyaltyForm");
@@ -204,18 +226,20 @@ const loyaltyVisits = document.getElementById("loyaltyVisits");
 const loyaltyRewards = document.getElementById("loyaltyRewards");
 const loyaltyNextReward = document.getElementById("loyaltyNextReward");
 
+// الاسم لم يعد مطلوبًا للبحث
+loyaltyName?.removeAttribute("required");
+
 loyaltyForm?.addEventListener("submit", async event => {
   event.preventDefault();
 
-  loyaltyMessage.textContent = "";
-  loyaltyResult.style.display = "none";
+  if (loyaltyMessage) loyaltyMessage.textContent = "";
+  if (loyaltyResult) loyaltyResult.style.display = "none";
 
-  const name = loyaltyName.value.trim();
-  const phone = loyaltyPhone.value.trim();
+  const phone = loyaltyPhone?.value.trim() || "";
 
-  if (name.length < 2 || normalizePhone(phone).length < 7) {
+  if (normalizePhone(phone).length < 7) {
     loyaltyMessage.textContent =
-      "من فضلك اكتب الاسم ورقم الموبايل بشكل صحيح.";
+      "من فضلك اكتب رقم الموبايل بشكل صحيح.";
 
     return;
   }
@@ -224,14 +248,14 @@ loyaltyForm?.addEventListener("submit", async event => {
   loyaltyButton.textContent = "جاري البحث...";
 
   try {
-    const customerId = await createCustomerId(name, phone);
+    const customerId = await createCustomerId(phone);
 
     const customerRef = doc(db, "customers", customerId);
     const customerSnapshot = await getDoc(customerRef);
 
     if (!customerSnapshot.exists()) {
       loyaltyMessage.textContent =
-        "لم نجد زيارات مسجلة بالبيانات دي. لو زرت الصالون قبل كده، تواصل معانا.";
+        "لم نجد زيارات مسجلة بالرقم ده. لو زرت الصالون قبل كده، تواصل معانا.";
 
       return;
     }
@@ -247,9 +271,10 @@ loyaltyForm?.addEventListener("submit", async event => {
     loyaltyVisits.textContent = visits;
     loyaltyRewards.textContent = available;
 
-    const nextVisit = ((visits % 5) === 0 && visits > 0)
-      ? 5
-      : 5 - (visits % 5);
+    const nextVisit =
+      visits > 0 && visits % 5 === 0
+        ? 5
+        : 5 - (visits % 5);
 
     if (available > 0) {
       loyaltyNextReward.textContent =
@@ -336,7 +361,10 @@ adminLoginForm?.addEventListener("submit", async event => {
     if (result.user.uid !== ADMIN_UID) {
       await signOut(auth);
 
-      showAdminMessage("هذا الحساب غير مصرح له بدخول الإدارة.");
+      showAdminMessage(
+        "هذا الحساب غير مصرح له بدخول الإدارة."
+      );
+
       return;
     }
 
@@ -347,11 +375,17 @@ adminLoginForm?.addEventListener("submit", async event => {
     console.error("Login error:", error);
 
     if (error.code === "auth/invalid-credential") {
-      showAdminMessage("البريد الإلكتروني أو كلمة المرور غير صحيحة.");
+      showAdminMessage(
+        "البريد الإلكتروني أو كلمة المرور غير صحيحة."
+      );
     } else if (error.code === "auth/too-many-requests") {
-      showAdminMessage("محاولات كثيرة. حاول مرة أخرى لاحقًا.");
+      showAdminMessage(
+        "محاولات كثيرة. حاول مرة أخرى لاحقًا."
+      );
     } else {
-      showAdminMessage("حدث خطأ أثناء تسجيل الدخول.");
+      showAdminMessage(
+        "حدث خطأ أثناء تسجيل الدخول."
+      );
     }
   }
 });
@@ -363,7 +397,9 @@ adminLoginForm?.addEventListener("submit", async event => {
 let loyaltyAdminList = null;
 
 function createAdminLoyaltySection() {
-  if (loyaltyAdminList || !adminDashboard || !bookingsList) return;
+  if (loyaltyAdminList || !adminDashboard || !bookingsList) {
+    return;
+  }
 
   const section = document.createElement("section");
 
@@ -388,7 +424,7 @@ function createAdminLoyaltySection() {
 }
 
 // =====================================
-// مزامنة الزيارات مع ملفات العملاء
+// ترحيل السجلات القديمة وحفظ الزيارات
 // =====================================
 
 async function syncCustomerRecords(snapshot) {
@@ -404,45 +440,151 @@ async function syncCustomerRecords(snapshot) {
 
     if (!phone || !name) continue;
 
-    const customerId = await createCustomerId(name, phone);
-
-    if (!customers.has(customerId)) {
-      customers.set(customerId, {
-        visits: 0
+    if (!customers.has(phone)) {
+      customers.set(phone, {
+        phone,
+        bookings: [],
+        legacyIds: new Set()
       });
     }
 
-    customers.get(customerId).visits++;
+    const customer = customers.get(phone);
+
+    customer.bookings.push({
+      id: item.id,
+      data: booking
+    });
+
+    const legacyId = await createLegacyCustomerId(
+      booking.name,
+      booking.phone
+    );
+
+    customer.legacyIds.add(legacyId);
   }
 
-  for (const [customerId, customer] of customers) {
+  const result = new Map();
+
+  for (const [phone, customer] of customers) {
+    const customerId = await createCustomerId(phone);
     const customerRef = doc(db, "customers", customerId);
 
-    const oldSnapshot = await getDoc(customerRef);
+    await runTransaction(db, async transaction => {
+      const currentSnapshot = await transaction.get(customerRef);
 
-    const oldData = oldSnapshot.exists()
-      ? oldSnapshot.data()
-      : {};
+      const currentData = currentSnapshot.exists()
+        ? currentSnapshot.data()
+        : {};
 
-    const earned = Math.floor(customer.visits / 5);
+      let visits = Number(currentData.visits || 0);
+      let rewardsUsed = Number(currentData.rewardsUsed || 0);
 
-    const used = Number(oldData.rewardsUsed || 0);
+      const processed = new Set(
+        Array.isArray(currentData.completedBookingIds)
+          ? currentData.completedBookingIds
+          : []
+      );
 
-    if (
-      Number(oldData.visits || 0) !== customer.visits ||
-      Number(oldData.rewardsEarned || 0) !== earned ||
-      !oldSnapshot.exists()
-    ) {
-      await setDoc(customerRef, {
-        visits: customer.visits,
-        rewardsEarned: earned,
-        rewardsUsed: used,
-        updatedAt: serverTimestamp()
-      });
+      // ترحيل السجلات القديمة مرة واحدة فقط
+      if (!currentData.legacyMigrated) {
+        const legacyRefs = [];
+
+        for (const legacyId of customer.legacyIds) {
+          if (legacyId !== customerId) {
+            legacyRefs.push(
+              doc(db, "customers", legacyId)
+            );
+          }
+        }
+
+        const legacySnapshots = [];
+
+        for (const legacyRef of legacyRefs) {
+          legacySnapshots.push(
+            await transaction.get(legacyRef)
+          );
+        }
+
+        let legacyVisits = 0;
+        let legacyUsed = 0;
+        let foundLegacy = false;
+
+        for (const legacySnapshot of legacySnapshots) {
+          if (!legacySnapshot.exists()) continue;
+
+          foundLegacy = true;
+
+          const oldData = legacySnapshot.data();
+
+          legacyVisits += Number(oldData.visits || 0);
+          legacyUsed += Number(oldData.rewardsUsed || 0);
+        }
+
+        if (foundLegacy) {
+          visits = Math.max(visits, legacyVisits);
+          rewardsUsed = Math.max(rewardsUsed, legacyUsed);
+        } else if (!currentSnapshot.exists()) {
+          visits = customer.bookings.length;
+        }
+
+        // الحجوزات الحالية لا يعاد احتسابها بعد الترحيل
+        for (const booking of customer.bookings) {
+          processed.add(booking.id);
+        }
+
+        const rewardsEarned = Math.max(
+          Number(currentData.rewardsEarned || 0),
+          Math.floor(visits / 5)
+        );
+
+        transaction.set(customerRef, {
+          visits,
+          rewardsEarned,
+          rewardsUsed,
+          completedBookingIds: Array.from(processed),
+          legacyMigrated: true,
+          updatedAt: serverTimestamp()
+        });
+
+        return;
+      }
+
+      // احتساب الحجوزات الجديدة مرة واحدة فقط
+      let changed = false;
+
+      for (const booking of customer.bookings) {
+        if (processed.has(booking.id)) continue;
+
+        processed.add(booking.id);
+        visits++;
+        changed = true;
+      }
+
+      const rewardsEarned = Math.max(
+        Number(currentData.rewardsEarned || 0),
+        Math.floor(visits / 5)
+      );
+
+      if (changed || !currentSnapshot.exists()) {
+        transaction.set(customerRef, {
+          visits,
+          rewardsEarned,
+          rewardsUsed,
+          completedBookingIds: Array.from(processed),
+          legacyMigrated: true,
+          updatedAt: serverTimestamp()
+        });
+      }
+    });
+
+    const latest = await getDoc(customerRef);
+
+    if (latest.exists()) {
+      result.set(customerId, latest.data());
     }
   }
 
-  return customers;
+  return result;
 }
 
 // =====================================
@@ -463,18 +605,13 @@ async function renderAdminCustomers(customers) {
     return;
   }
 
-  for (const [customerId, customer] of customers) {
+  for (const [customerId, data] of customers) {
     const customerRef = doc(db, "customers", customerId);
 
-    const customerSnapshot = await getDoc(customerRef);
-
-    const data = customerSnapshot.exists()
-      ? customerSnapshot.data()
-      : {};
-
-    const visits = customer.visits;
+    const visits = Number(data.visits || 0);
     const earned = Number(data.rewardsEarned || 0);
     const used = Number(data.rewardsUsed || 0);
+
     const available = Math.max(0, earned - used);
 
     const card = document.createElement("div");
@@ -488,10 +625,12 @@ async function renderAdminCustomers(customers) {
     `;
 
     const title = document.createElement("h4");
-    title.textContent = "عميل رقم " + customerId.slice(0, 8);
+    title.textContent =
+      "عميل رقم " + customerId.slice(0, 8);
 
     const visitsText = document.createElement("p");
-    visitsText.textContent = "الزيارات المكتملة: " + visits;
+    visitsText.textContent =
+      "الزيارات المكتملة: " + visits;
 
     const rewardsText = document.createElement("p");
     rewardsText.textContent =
@@ -501,7 +640,12 @@ async function renderAdminCustomers(customers) {
     usedText.textContent =
       "المكافآت المستخدمة: " + used;
 
-    card.append(title, visitsText, rewardsText, usedText);
+    card.append(
+      title,
+      visitsText,
+      rewardsText,
+      usedText
+    );
 
     if (available > 0) {
       const redeemButton = document.createElement("button");
@@ -522,7 +666,9 @@ async function renderAdminCustomers(customers) {
       `;
 
       redeemButton.addEventListener("click", async () => {
-        if (!confirm("هل تم استخدام مكافأة تنظيف البشرة VIP؟")) {
+        if (!confirm(
+          "هل تم استخدام مكافأة تنظيف البشرة VIP؟"
+        )) {
           return;
         }
 
@@ -530,36 +676,49 @@ async function renderAdminCustomers(customers) {
         redeemButton.textContent = "جاري التسجيل...";
 
         try {
-          const latestSnapshot = await getDoc(customerRef);
+          await runTransaction(db, async transaction => {
+            const latestSnapshot =
+              await transaction.get(customerRef);
 
-          if (!latestSnapshot.exists()) {
-            throw new Error("Customer not found");
-          }
+            if (!latestSnapshot.exists()) {
+              throw new Error("Customer not found");
+            }
 
-          const latest = latestSnapshot.data();
+            const latest = latestSnapshot.data();
 
-          const latestAvailable =
-            Number(latest.rewardsEarned || 0) -
-            Number(latest.rewardsUsed || 0);
+            const latestAvailable =
+              Number(latest.rewardsEarned || 0) -
+              Number(latest.rewardsUsed || 0);
 
-          if (latestAvailable <= 0) {
-            alert("لا توجد مكافآت متاحة.");
-            return;
-          }
+            if (latestAvailable <= 0) {
+              throw new Error("No rewards available");
+            }
 
-          await updateDoc(customerRef, {
-            rewardsUsed: Number(latest.rewardsUsed || 0) + 1,
-            updatedAt: serverTimestamp()
+            transaction.update(customerRef, {
+              rewardsUsed:
+                Number(latest.rewardsUsed || 0) + 1,
+              updatedAt: serverTimestamp()
+            });
           });
 
           alert("تم تسجيل استخدام المكافأة بنجاح.");
+
+          const updatedSnapshot = await getDoc(customerRef);
+
+          if (updatedSnapshot.exists()) {
+            customers.set(customerId, updatedSnapshot.data());
+          }
 
           await renderAdminCustomers(customers);
 
         } catch (error) {
           console.error("Reward redemption error:", error);
 
-          alert("تعذر تسجيل استخدام المكافأة.");
+          alert(
+            error.message === "No rewards available"
+              ? "لا توجد مكافآت متاحة."
+              : "تعذر تسجيل استخدام المكافأة."
+          );
 
           redeemButton.disabled = false;
           redeemButton.textContent =
@@ -615,7 +774,9 @@ function loadBookings() {
       }
 
       if (snapshot.empty) {
-        adminStatus.textContent = "لا توجد حجوزات حتى الآن.";
+        adminStatus.textContent =
+          "لا توجد حجوزات حتى الآن.";
+
         return;
       }
 
@@ -675,10 +836,10 @@ function loadBookings() {
           ["completed", "تم تنفيذ الخدمة"]
         ];
 
-        statuses.forEach(([value, text]) => {
+        statuses.forEach(([value, label]) => {
           const option = document.createElement("option");
           option.value = value;
-          option.textContent = text;
+          option.textContent = label;
           select.appendChild(option);
         });
 
@@ -723,12 +884,63 @@ function loadBookings() {
           }
         });
 
+        // =====================================
+        // زر حذف الحجز
+        // =====================================
+
+        const deleteButton = document.createElement("button");
+
+        deleteButton.type = "button";
+        deleteButton.textContent = "🗑 حذف الحجز";
+
+        deleteButton.style.cssText = `
+          background:#8b2525;
+          color:white;
+          border:0;
+          padding:10px 18px;
+          border-radius:6px;
+          cursor:pointer;
+          margin:8px;
+          font-weight:bold;
+        `;
+
+        deleteButton.addEventListener("click", async () => {
+          const confirmed = confirm(
+            "هل أنت متأكد من حذف الحجز؟\n\n" +
+            "سجل زيارات العميل ومكافآته لن يتم حذفه."
+          );
+
+          if (!confirmed) return;
+
+          deleteButton.disabled = true;
+          deleteButton.textContent = "جاري الحذف...";
+
+          try {
+            await deleteDoc(
+              doc(db, "bookings", bookingDoc.id)
+            );
+
+            alert(
+              "تم حذف الحجز. سجل زيارات العميل ومكافآته محفوظ."
+            );
+
+          } catch (error) {
+            console.error("Delete booking error:", error);
+
+            alert("تعذر حذف الحجز.");
+
+            deleteButton.disabled = false;
+            deleteButton.textContent = "🗑 حذف الحجز";
+          }
+        });
+
         statusLabel.appendChild(select);
 
         card.appendChild(title);
         card.appendChild(details);
         card.appendChild(statusLabel);
         card.appendChild(saveButton);
+        card.appendChild(deleteButton);
 
         bookingsList.appendChild(card);
       });
@@ -749,8 +961,13 @@ function loadBookings() {
 
 onAuthStateChanged(auth, user => {
   if (user && user.uid === ADMIN_UID) {
-    if (adminLogin) adminLogin.style.display = "none";
-    if (adminDashboard) adminDashboard.style.display = "block";
+    if (adminLogin) {
+      adminLogin.style.display = "none";
+    }
+
+    if (adminDashboard) {
+      adminDashboard.style.display = "block";
+    }
 
     createAdminLoyaltySection();
     loadBookings();
@@ -761,12 +978,21 @@ onAuthStateChanged(auth, user => {
       unsubscribeBookings = null;
     }
 
-    if (adminLogin) adminLogin.style.display = "block";
-    if (adminDashboard) adminDashboard.style.display = "none";
+    if (adminLogin) {
+      adminLogin.style.display = "block";
+    }
 
-    if (bookingsList) bookingsList.replaceChildren();
+    if (adminDashboard) {
+      adminDashboard.style.display = "none";
+    }
 
-    if (loyaltyAdminList) loyaltyAdminList.replaceChildren();
+    if (bookingsList) {
+      bookingsList.replaceChildren();
+    }
+
+    if (loyaltyAdminList) {
+      loyaltyAdminList.replaceChildren();
+    }
   }
 });
 
