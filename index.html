@@ -14,7 +14,6 @@
   <link rel="stylesheet" href="styles.css">
 
   <style>
-    /* إصلاح قائمة الموبايل */
     @media (max-width: 768px) {
       #mainNav {
         display: none;
@@ -54,6 +53,81 @@
       cursor: pointer;
       text-decoration: none;
     }
+
+    /* قسم الولاء */
+    .loyalty-section {
+      padding: 65px 20px;
+      background: #101010;
+      border-top: 1px solid #302719;
+      border-bottom: 1px solid #302719;
+    }
+
+    .loyalty-box {
+      max-width: 650px;
+      margin: auto;
+      padding: 30px 22px;
+      background: #171717;
+      border: 1px solid #c9a45c;
+      border-radius: 16px;
+      text-align: center;
+      color: white;
+    }
+
+    .loyalty-box h2 {
+      color: #e5c477;
+      margin-bottom: 12px;
+    }
+
+    .loyalty-box > p {
+      color: #ccc;
+      line-height: 1.9;
+    }
+
+    .loyalty-form {
+      display: grid;
+      gap: 15px;
+      margin-top: 25px;
+      text-align: right;
+    }
+
+    .loyalty-form label {
+      display: block;
+      color: #e5c477;
+    }
+
+    .loyalty-form input {
+      display: block;
+      width: 100%;
+      margin-top: 8px;
+      padding: 14px;
+      border: 1px solid #65502d;
+      border-radius: 8px;
+      background: #0d0d0d;
+      color: white;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+
+    .loyalty-result {
+      display: none;
+      margin-top: 22px;
+      padding: 18px;
+      border: 1px solid #c9a45c;
+      border-radius: 10px;
+      background: #211c13;
+      color: #fff;
+      line-height: 2;
+      text-align: center;
+    }
+
+    .loyalty-result strong {
+      color: #e5c477;
+    }
+
+    .loyalty-message {
+      margin-top: 15px;
+      color: #e5c477;
+    }
   </style>
 </head>
 
@@ -76,6 +150,7 @@
     <a href="#services">الخدمات</a>
     <a href="#gallery">معرض الأعمال</a>
     <a href="#booking">احجز موعدك</a>
+    <a href="#loyalty">زياراتي ومكافآتي</a>
     <a href="#contact">تواصل معنا</a>
   </nav>
 
@@ -297,6 +372,71 @@
     </div>
   </section>
 
+  <!-- زياراتي ومكافآت VIP -->
+  <section class="loyalty-section" id="loyalty">
+
+    <div class="loyalty-box">
+
+      <p class="eyebrow centered">عملاء FAHD KHALED SALON</p>
+
+      <h2>زياراتك ليها مكافأة VIP</h2>
+
+      <p>
+        كل 5 زيارات مكتملة ليك في الصالون،
+        تستحق تنظيف بشرة VIP بخصم 50%.
+      </p>
+
+      <form id="loyaltyForm" class="loyalty-form">
+
+        <label>
+          اسمك بالكامل
+          <input
+            type="text"
+            id="loyaltyName"
+            placeholder="اكتب اسمك"
+            maxlength="70"
+            required
+          >
+        </label>
+
+        <label>
+          رقم الموبايل
+          <input
+            type="tel"
+            id="loyaltyPhone"
+            placeholder="01xxxxxxxxx"
+            maxlength="20"
+            inputmode="tel"
+            required
+          >
+        </label>
+
+        <button
+          type="submit"
+          class="button button-gold"
+          id="loyaltySearchButton"
+        >
+          اعرف زياراتي ومكافآتي
+        </button>
+
+      </form>
+
+      <p id="loyaltyMessage" class="loyalty-message" role="status"></p>
+
+      <div id="loyaltyResult" class="loyalty-result" aria-live="polite">
+        <p>إجمالي زياراتك المكتملة: <strong id="loyaltyVisits">0</strong></p>
+        <p>المكافآت المستحقة: <strong id="loyaltyRewards">0</strong></p>
+        <p id="loyaltyNextReward"></p>
+      </div>
+
+      <p style="font-size:13px;color:#aaa;margin-top:20px;">
+        المكافآت تُحسب على الزيارات التي تم تنفيذها وتسجيلها في الصالون.
+      </p>
+
+    </div>
+
+  </section>
+
   <!-- التواصل -->
   <section class="contact section-wrap" id="contact">
 
@@ -401,7 +541,7 @@
 
 </footer>
 
-<script type="module" src="app.js?v=4"></script>
+<script type="module" src="app.js?v=5"></script>
 
 </body>
   </html>
