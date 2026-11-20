@@ -12,11 +12,55 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="styles.css">
+
+  <style>
+    /* إصلاح قائمة الموبايل */
+    @media (max-width: 768px) {
+      #mainNav {
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: 100%;
+        right: 0;
+        left: 0;
+        width: 100%;
+        background: #111;
+        padding: 20px;
+        z-index: 9999;
+        border-top: 1px solid #c9a45c;
+      }
+
+      #mainNav.open {
+        display: flex !important;
+      }
+
+      #mainNav a {
+        display: block;
+        padding: 12px;
+        color: white;
+        text-decoration: none;
+      }
+
+      #menuToggle {
+        cursor: pointer;
+      }
+    }
+
+    #adminPanel {
+      scroll-margin-top: 30px;
+    }
+
+    #adminAccess {
+      cursor: pointer;
+      text-decoration: none;
+    }
+  </style>
 </head>
 
 <body>
 
 <header class="topbar">
+
   <a class="brand" href="#home" aria-label="الصفحة الرئيسية">
     <span class="brand-mark">FK</span>
     <span>
@@ -25,7 +69,7 @@
     </span>
   </a>
 
-  <button class="menu-toggle" id="menuToggle" aria-label="فتح القائمة">☰</button>
+  <button class="menu-toggle" id="menuToggle" type="button" aria-label="فتح القائمة" aria-expanded="false">☰</button>
 
   <nav id="mainNav">
     <a href="#home">الرئيسية</a>
@@ -36,6 +80,7 @@
   </nav>
 
   <a class="nav-book" href="#booking">احجز الآن</a>
+
 </header>
 
 <main>
@@ -72,7 +117,7 @@
     </div>
   </section>
 
-  <!-- مقدمة -->
+  <!-- المقدمة -->
   <section class="intro section-wrap">
     <p class="eyebrow centered">أهلاً بيك في صالون فهد خالد</p>
 
@@ -93,7 +138,6 @@
         <p class="eyebrow">اختار اللي يناسبك</p>
         <h2 class="section-title">خدماتنا <em>وأسعارنا</em></h2>
       </div>
-
       <span class="section-index">01 / SERVICES</span>
     </div>
 
@@ -146,7 +190,6 @@
         <p class="eyebrow">من شغلنا</p>
         <h2 class="section-title">معرض <em>الأعمال</em></h2>
       </div>
-
       <span class="section-index">02 / GALLERY</span>
     </div>
 
@@ -262,7 +305,6 @@
         <p class="eyebrow">خليك على تواصل</p>
         <h2 class="section-title">زورنا أو <em>كلمنا</em></h2>
       </div>
-
       <span class="section-index">03 / CONTACT</span>
     </div>
 
@@ -306,29 +348,18 @@
       </div>
     </div>
 
-    <!-- تسجيل دخول المدير -->
     <div id="adminLogin" class="booking-form">
 
       <form id="adminLoginForm">
 
         <label>
           البريد الإلكتروني
-          <input
-            id="adminEmail"
-            type="email"
-            placeholder="البريد الإلكتروني"
-            required
-          >
+          <input id="adminEmail" type="email" placeholder="البريد الإلكتروني" required>
         </label>
 
         <label>
           كلمة المرور
-          <input
-            id="adminPassword"
-            type="password"
-            placeholder="كلمة المرور"
-            required
-          >
+          <input id="adminPassword" type="password" placeholder="كلمة المرور" required>
         </label>
 
         <button class="button button-gold" type="submit">
@@ -341,7 +372,6 @@
 
     </div>
 
-    <!-- لوحة الحجوزات بعد تسجيل الدخول -->
     <div id="adminDashboard" style="display:none;">
 
       <button id="adminLogout" class="button button-outline" type="button">
@@ -360,22 +390,18 @@
 
 </main>
 
-<!-- نهاية الموقع -->
 <footer style="text-align:center; padding:30px 15px;">
 
   <p>FAHD KHALED SALON</p>
 
-  <a
-    href="#adminPanel"
-    id="adminAccess"
-    style="color:#c9a45c; display:block; margin-top:15px;"
-  >
+  <a href="#adminPanel" id="adminAccess"
+     style="color:#c9a45c; display:block; margin-top:15px;">
     دخول الإدارة
   </a>
 
 </footer>
 
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=4"></script>
 
 </body>
-    </html>
+  </html>
