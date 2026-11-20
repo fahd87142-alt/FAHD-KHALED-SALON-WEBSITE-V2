@@ -1,6 +1,6 @@
 // =====================================
 // FAHD KHALED SALON
-// Firebase + Booking + Admin Dashboard
+// Firebase + Booking + Admin + Visits
 // =====================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
@@ -49,7 +49,6 @@ const ADMIN_UID = "n11bT3BtMaXwCWv2iYjW1sQ61Hv2";
 const menuToggle = document.getElementById("menuToggle");
 const nav = document.getElementById("mainNav");
 
-// القائمة الرئيسية
 menuToggle?.addEventListener("click", () => {
   nav?.classList.toggle("open");
 });
@@ -60,7 +59,7 @@ nav?.querySelectorAll("a").forEach(link => {
   });
 });
 
-// السنة - بدون إيقاف باقي الكود لو العنصر غير موجود
+// السنة
 const yearElement = document.getElementById("year");
 
 if (yearElement) {
@@ -260,7 +259,24 @@ adminLoginForm?.addEventListener("submit", async (event) => {
 });
 
 // =====================================
-// عرض الحجوزات
+// توحيد رقم الموبايل لحساب الزيارات
+// =====================================
+
+function normalizePhone(phone) {
+  let value = String(phone || "").replace(/\D/g, "");
+
+  // توحيد الأرقام المصرية التي تبدأ بـ 0020 أو 20
+  if (value.startsWith("0020")) {
+    value = value.slice(4);
+  } else if (value.startsWith("20") && value.length === 12) {
+    value = value.slice(2);
+  }
+
+  return value;
+}
+
+// =====================================
+// عرض الحجوزات وعدد زيارات العملاء
 // =====================================
 
 function loadBookings() {
@@ -292,12 +308,36 @@ function loadBookings() {
         return;
       }
 
+      // حساب الزيارات لكل عميل
+      const visitsByPhone = {};
+
+      snapshot.forEach((item) => {
+
+        const data = item.data();
+
+        if (data.status === "completed") {
+
+          const phone = normalizePhone(data.phone);
+
+          if (phone) {
+            visitsByPhone[phone] =
+              (visitsByPhone[phone] || 0) + 1;
+          }
+
+        }
+
+      });
+
       adminStatus.textContent =
         "عدد طلبات الحجز: " + snapshot.size;
 
       snapshot.forEach((bookingDoc) => {
 
         const booking = bookingDoc.data();
+
+        const customerPhone = normalizePhone(booking.phone);
+
+        const visits = visitsByPhone[customerPhone] || 0;
 
         const card = document.createElement("div");
 
@@ -332,6 +372,23 @@ function loadBookings() {
           details.appendChild(p);
 
         });
+
+        // عرض عدد الزيارات
+        const visitsBox = document.createElement("div");
+
+        visitsBox.textContent =
+          "⭐ إجمالي زيارات العميل: " + visits + " زيارة";
+
+        visitsBox.style.cssText = `
+          background:#292216;
+          border:1px solid #c9a45c;
+          color:#e5c477;
+          padding:12px;
+          border-radius:8px;
+          margin:12px 0;
+          font-weight:bold;
+          text-align:center;
+        `;
 
         const statusLabel = document.createElement("label");
         statusLabel.textContent = "حالة الحجز: ";
@@ -417,6 +474,7 @@ function loadBookings() {
 
         card.appendChild(title);
         card.appendChild(details);
+        card.appendChild(visitsBox);
         card.appendChild(statusLabel);
         card.appendChild(saveButton);
 
