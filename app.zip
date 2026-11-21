@@ -46,7 +46,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-
+console.log("FAHD SALON APP LOADED");
 const ADMIN_UID = "n11bT3BtMaXwCWv2";
 
 // إصلاح التحقق من حساب المدير
