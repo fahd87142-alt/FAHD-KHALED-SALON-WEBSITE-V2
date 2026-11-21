@@ -49,6 +49,11 @@ const auth = getAuth(app);
 
 const ADMIN_UID = "n11bT3BtMaXwCWv2";
 
+// إصلاح التحقق من حساب المدير
+function isAdminUser(user) {
+  return Boolean(user && user.uid === ADMIN_UID);
+}
+
 // =====================================
 // القائمة والسنة
 // =====================================
