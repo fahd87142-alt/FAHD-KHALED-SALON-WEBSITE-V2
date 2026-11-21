@@ -1,6 +1,7 @@
 // ==========================================
 // FAHD KHALED SALON
-// COMPLETE BOOKING + ADMIN + LOYALTY SYSTEM
+// COMPLETE BOOKING + ADMIN + LOYALTY
+// FIXED VERSION 21
 // ==========================================
 
 import { initializeApp } from
@@ -12,9 +13,7 @@ import {
   doc,
   getDoc,
   getDocs,
-  setDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   orderBy,
@@ -73,7 +72,6 @@ function showError(error) {
 
   if (box) {
     box.hidden = false;
-
     box.textContent =
       "حصل خطأ: " +
       (error?.message || "يرجى المحاولة مرة أخرى");
@@ -120,21 +118,32 @@ function localDate(date) {
 
 function addDays(dateString, days) {
   const date = new Date(dateString + "T12:00:00");
-
   date.setDate(date.getDate() + days);
-
   return localDate(date);
 }
 
 function makeSlotId(barber, date, time) {
-  const safeBarber = barber.replace(/[^\u0600-\u06FFa-zA-Z0-9]/g, "");
+  const safeBarber = barber.replace(
+    /[^\u0600-\u06FFa-zA-Z0-9]/g,
+    ""
+  );
 
   return `${safeBarber}_${date}_${time.replace(":", "-")}`;
 }
 
+function requiredElement(id) {
+  const element = $(id);
+
+  if (!element) {
+    throw new Error("عنصر غير موجود في الصفحة: " + id);
+  }
+
+  return element;
+}
+
 
 // ==========================================
-// SERVICES
+// SERVICES AND BARBERS
 // ==========================================
 
 const SERVICES = {
@@ -178,11 +187,14 @@ mainNav?.querySelectorAll("a").forEach(link => {
   });
 });
 
-$("currentYear").textContent = new Date().getFullYear();
+// إصلاح احتمال عدم وجود currentYear
+if ($("currentYear")) {
+  $("currentYear").textContent = new Date().getFullYear();
+}
 
 
 // ==========================================
-// BOOKING DATE
+// BOOKING ELEMENTS
 // ==========================================
 
 const bookingDate = $("bookingDate");
@@ -191,8 +203,10 @@ const barberSelect = $("barberSelect");
 
 const today = localDate(new Date());
 
-bookingDate.min = today;
-bookingDate.value = today;
+if (bookingDate) {
+  bookingDate.min = today;
+  bookingDate.value = today;
+}
 
 
 // ==========================================
@@ -222,17 +236,24 @@ function calculateTotal() {
     0
   );
 
-  $("bookingTotal").textContent = money(total);
+  if ($("bookingTotal")) {
+    $("bookingTotal").textContent = money(total);
+  }
 
-  $("selectedServicesSummary").textContent =
-    selected.length
-      ? selected.map(item => item.name).join(" + ")
-      : "لم يتم اختيار خدمات بعد";
+  if ($("selectedServicesSummary")) {
+    $("selectedServicesSummary").textContent =
+      selected.length
+        ? selected.map(item => item.name).join(" + ")
+        : "لم يتم اختيار خدمات بعد";
+  }
 
   return total;
 }
 
-$("serviceChoices").addEventListener("change", calculateTotal);
+$("serviceChoices")?.addEventListener(
+  "change",
+  calculateTotal
+);
 
 
 // ==========================================
@@ -242,11 +263,11 @@ $("serviceChoices").addEventListener("change", calculateTotal);
 function generateTimes() {
   const times = [];
 
-  // مواعيد البداية كل 15 دقيقة
-  // من 11 صباحا حتى 12:15 بعد منتصف الليل
-
-  for (let minutes = 11 * 60; minutes <= 24 * 60 + 15; minutes += 15) {
-
+  for (
+    let minutes = 11 * 60;
+    minutes <= 24 * 60 + 15;
+    minutes += 15
+  ) {
     const normalized = minutes % (24 * 60);
 
     const hours = Math.floor(normalized / 60);
@@ -268,13 +289,10 @@ const ALL_TIMES = generateTimes();
 function getAppointmentSlots(date, time) {
   const [hours, minutes] = time.split(":").map(Number);
 
-  const start = new Date(
-    date + "T00:00:00"
-  );
+  const start = new Date(date + "T00:00:00");
 
   start.setHours(hours, minutes, 0, 0);
 
-  // بعد منتصف الليل يعني اليوم التالي
   if (hours < 11) {
     start.setDate(start.getDate() + 1);
   }
@@ -282,19 +300,16 @@ function getAppointmentSlots(date, time) {
   const slots = [];
 
   for (let i = 0; i < 3; i++) {
-
-    const current = new Date(start.getTime() + i * 15 * 60000);
-
-    const slotDate = localDate(current);
-
-    const slotTime =
-      String(current.getHours()).padStart(2, "0") +
-      ":" +
-      String(current.getMinutes()).padStart(2, "0");
+    const current = new Date(
+      start.getTime() + i * 15 * 60000
+    );
 
     slots.push({
-      date: slotDate,
-      time: slotTime
+      date: localDate(current),
+      time:
+        String(current.getHours()).padStart(2, "0") +
+        ":" +
+        String(current.getMinutes()).padStart(2, "0")
     });
   }
 
@@ -303,28 +318,39 @@ function getAppointmentSlots(date, time) {
 
 
 // ==========================================
-// CHECK AVAILABLE BARBERS
+// CHECK BUSY SLOTS
 // ==========================================
 
-async function getBusySlots(barber, date) {
+// تم تعديل الاستعلام لتجنب طلب فهرس مركب من Firebase
 
+async function getBusySlots(barber, date) {
   const nextDate = addDays(date, 1);
 
   const q = query(
     collection(db, "barberSlots"),
-    where("barber", "==", barber),
-    where("date", "in", [date, nextDate])
+    where("barber", "==", barber)
   );
 
   const snapshot = await getDocs(q);
 
-  return new Set(snapshot.docs.map(item => item.id));
+  const busy = new Set();
+
+  snapshot.forEach(item => {
+    const slot = item.data();
+
+    if (
+      slot.date === date ||
+      slot.date === nextDate
+    ) {
+      busy.add(item.id);
+    }
+  });
+
+  return busy;
 }
 
 async function isBarberAvailable(barber, date, time) {
-
   const slots = getAppointmentSlots(date, time);
-
   const busy = await getBusySlots(barber, date);
 
   return slots.every(slot => {
@@ -338,7 +364,15 @@ async function isBarberAvailable(barber, date, time) {
   });
 }
 
+
+// ==========================================
+// REFRESH AVAILABLE TIMES
+// ==========================================
+
 async function refreshAvailableTimes() {
+  if (!barberSelect || !bookingDate || !bookingTime) {
+    return;
+  }
 
   if (!barberSelect.value || !bookingDate.value) {
     bookingTime.innerHTML =
@@ -359,14 +393,12 @@ async function refreshAvailableTimes() {
   );
 
   try {
-
     const date = bookingDate.value;
     const barber = barberSelect.value;
 
     const busy = await getBusySlots(barber, date);
 
     const available = ALL_TIMES.filter(time => {
-
       const slots = getAppointmentSlots(date, time);
 
       return slots.every(slot => {
@@ -384,7 +416,6 @@ async function refreshAvailableTimes() {
       '<option value="">اختار الموعد المناسب</option>';
 
     available.forEach(time => {
-
       const option = document.createElement("option");
 
       option.value = time;
@@ -396,15 +427,12 @@ async function refreshAvailableTimes() {
     bookingTime.disabled = false;
 
     if (available.length) {
-
       showMessage(
         $("availabilityMessage"),
         `متاح ${available.length} موعد للحلاق ${barber}`,
         "success"
       );
-
     } else {
-
       showMessage(
         $("availabilityMessage"),
         "الحلاق مشغول في اليوم ده. جرب تاريخ تاني.",
@@ -413,19 +441,30 @@ async function refreshAvailableTimes() {
     }
 
   } catch (error) {
+    console.error("Availability error:", error);
+
+    bookingTime.innerHTML =
+      '<option value="">تعذر تحميل المواعيد</option>';
 
     showMessage(
       $("availabilityMessage"),
-      "تعذر تحميل المواعيد. راجع اتصال الموقع.",
+      "تعذر تحميل المواعيد: " + error.message,
       "error"
     );
-
-    console.error(error);
+  } finally {
+    bookingTime.disabled = false;
   }
 }
 
-barberSelect.addEventListener("change", refreshAvailableTimes);
-bookingDate.addEventListener("change", refreshAvailableTimes);
+barberSelect?.addEventListener(
+  "change",
+  refreshAvailableTimes
+);
+
+bookingDate?.addEventListener(
+  "change",
+  refreshAvailableTimes
+);
 
 
 // ==========================================
@@ -433,11 +472,9 @@ bookingDate.addEventListener("change", refreshAvailableTimes);
 // ==========================================
 
 async function findOtherBarbers(date, time, selectedBarber) {
-
   const available = [];
 
   for (const barber of BARBERS) {
-
     if (barber === selectedBarber) continue;
 
     if (await isBarberAvailable(barber, date, time)) {
@@ -450,11 +487,10 @@ async function findOtherBarbers(date, time, selectedBarber) {
 
 
 // ==========================================
-// CREATE BOOKING SAFELY
+// CREATE BOOKING
 // ==========================================
 
 async function createBooking(data) {
-
   const bookingRef = doc(collection(db, "bookings"));
 
   const slots = getAppointmentSlots(
@@ -463,7 +499,6 @@ async function createBooking(data) {
   );
 
   const slotRefs = slots.map(slot => {
-
     const id = makeSlotId(
       data.barber,
       slot.date,
@@ -479,8 +514,6 @@ async function createBooking(data) {
   });
 
   await runTransaction(db, async transaction => {
-
-    // قراءة كل الخانات أولا
     const existing = [];
 
     for (const item of slotRefs) {
@@ -499,7 +532,9 @@ async function createBooking(data) {
       name: data.name,
       phone: data.phone,
       barber: data.barber,
-      service: data.services.map(item => item.name).join(" + "),
+      service: data.services.map(
+        item => item.name
+      ).join(" + "),
       services: data.services,
       total: data.total,
       date: data.date,
@@ -512,18 +547,14 @@ async function createBooking(data) {
 
     transaction.set(bookingRef, bookingData);
 
-    // حجز خانات الحلاق
     slotRefs.forEach(item => {
-
       transaction.set(item.ref, {
         bookingId: bookingRef.id,
         barber: data.barber,
         date: item.date,
         time: item.time
       });
-
     });
-
   });
 
   return bookingRef.id;
@@ -534,144 +565,165 @@ async function createBooking(data) {
 // BOOKING FORM
 // ==========================================
 
-$("bookingForm").addEventListener("submit", async event => {
+$("bookingForm")?.addEventListener(
+  "submit",
+  async event => {
+    event.preventDefault();
 
-  event.preventDefault();
+    const button = $("submitBooking");
 
-  const button = $("submitBooking");
-
-  const name = $("customerName").value.trim();
-  const phone = normalizePhone($("customerPhone").value);
-  const barber = barberSelect.value;
-  const date = bookingDate.value;
-  const time = bookingTime.value;
-  const notes = $("bookingNotes").value.trim();
-
-  const services = getSelectedServices();
-  const total = calculateTotal();
-
-  const message = $("formMessage");
-
-  $("bookingConfirmation").hidden = true;
-
-  if (name.length < 2) {
-    showMessage(message, "اكتب اسمك بشكل صحيح.", "error");
-    return;
-  }
-
-  if (phone.length < 7 || phone.length > 20) {
-    showMessage(message, "رقم الموبايل غير صحيح.", "error");
-    return;
-  }
-
-  if (!barber) {
-    showMessage(message, "اختار الحلاق الأول.", "error");
-    return;
-  }
-
-  if (!services.length) {
-    showMessage(message, "اختار خدمة واحدة على الأقل.", "error");
-    return;
-  }
-
-  if (!date || !time) {
-    showMessage(message, "اختار التاريخ والموعد.", "error");
-    return;
-  }
-
-  if (date < today) {
-    showMessage(message, "مينفعش تحجز في تاريخ فات.", "error");
-    return;
-  }
-
-  button.disabled = true;
-  button.textContent = "جاري تأكيد الحجز...";
-
-  showMessage(message, "جاري مراجعة الموعد...");
-
-  try {
-
-    const available = await isBarberAvailable(
-      barber,
-      date,
-      time
+    const name = $("customerName").value.trim();
+    const phone = normalizePhone(
+      $("customerPhone").value
     );
 
-    if (!available) {
+    const barber = barberSelect.value;
+    const date = bookingDate.value;
+    const time = bookingTime.value;
 
-      const otherBarbers = await findOtherBarbers(
-        date,
-        time,
-        barber
-      );
+    const notes = $("bookingNotes").value.trim();
 
-      let text = "الموعد ده اتحجز بالفعل.";
+    const services = getSelectedServices();
+    const total = calculateTotal();
 
-      if (otherBarbers.length) {
-        text += " متاح في نفس الوقت عند: " +
-          otherBarbers.join("، ");
-      } else {
-        text += " اختار موعد تاني.";
-      }
+    const message = $("formMessage");
 
-      throw new Error(text);
+    if ($("bookingConfirmation")) {
+      $("bookingConfirmation").hidden = true;
     }
 
-    await createBooking({
-      name,
-      phone,
-      barber,
-      date,
-      time,
-      notes,
-      services,
-      total
-    });
+    if (name.length < 2) {
+      showMessage(message, "اكتب اسمك بشكل صحيح.", "error");
+      return;
+    }
+
+    if (phone.length < 7 || phone.length > 20) {
+      showMessage(message, "رقم الموبايل غير صحيح.", "error");
+      return;
+    }
+
+    if (!barber) {
+      showMessage(message, "اختار الحلاق الأول.", "error");
+      return;
+    }
+
+    if (!services.length) {
+      showMessage(
+        message,
+        "اختار خدمة واحدة على الأقل.",
+        "error"
+      );
+      return;
+    }
+
+    if (!date || !time) {
+      showMessage(
+        message,
+        "اختار التاريخ والموعد.",
+        "error"
+      );
+      return;
+    }
+
+    if (date < today) {
+      showMessage(
+        message,
+        "مينفعش تحجز في تاريخ فات.",
+        "error"
+      );
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "جاري تأكيد الحجز...";
 
     showMessage(
       message,
-      "تم تأكيد الحجز بنجاح!",
-      "success"
+      "جاري مراجعة الموعد..."
     );
 
-    $("confirmationDetails").textContent =
-      `الاسم: ${name} | الحلاق: ${barber} | الخدمات: ${
-        services.map(item => item.name).join("، ")
-      } | الموعد: ${date} - ${time} | الإجمالي: ${money(total)}`;
+    try {
+      const available = await isBarberAvailable(
+        barber,
+        date,
+        time
+      );
 
-    $("bookingConfirmation").hidden = false;
+      if (!available) {
+        const otherBarbers = await findOtherBarbers(
+          date,
+          time,
+          barber
+        );
 
-    $("bookingForm").reset();
+        let text = "الموعد ده اتحجز بالفعل.";
 
-    $("bookingDate").value = today;
+        if (otherBarbers.length) {
+          text +=
+            " متاح في نفس الوقت عند: " +
+            otherBarbers.join("، ");
+        } else {
+          text += " اختار موعد تاني.";
+        }
 
-    calculateTotal();
+        throw new Error(text);
+      }
 
-    bookingTime.innerHTML =
-      '<option value="">اختار الحلاق والتاريخ أولاً</option>';
+      await createBooking({
+        name,
+        phone,
+        barber,
+        date,
+        time,
+        notes,
+        services,
+        total
+      });
 
-    bookingTime.disabled = true;
+      showMessage(
+        message,
+        "تم تأكيد الحجز بنجاح!",
+        "success"
+      );
 
-    $("bookingConfirmation").scrollIntoView({
-      behavior: "smooth",
-      block: "center"
-    });
+      $("confirmationDetails").textContent =
+        `الاسم: ${name} | الحلاق: ${barber} | الخدمات: ${
+          services.map(item => item.name).join("، ")
+        } | الموعد: ${date} - ${time} | الإجمالي: ${money(total)}`;
 
-  } catch (error) {
+      $("bookingConfirmation").hidden = false;
 
-    showMessage(
-      message,
-      error.message || "حصل خطأ أثناء الحجز.",
-      "error"
-    );
+      $("bookingForm").reset();
 
-  } finally {
+      bookingDate.value = today;
 
-    button.disabled = false;
-    button.textContent = "تأكيد الحجز";
+      calculateTotal();
+
+      bookingTime.innerHTML =
+        '<option value="">اختار الحلاق والتاريخ أولاً</option>';
+
+      bookingTime.disabled = true;
+
+      $("bookingConfirmation").scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+
+    } catch (error) {
+      console.error("Booking error:", error);
+
+      showMessage(
+        message,
+        error.message || "حصل خطأ أثناء الحجز.",
+        "error"
+      );
+
+    } finally {
+      button.disabled = false;
+      button.textContent = "تأكيد الحجز";
+    }
   }
-
-});
+);
 
 
 // ==========================================
@@ -679,7 +731,6 @@ $("bookingForm").addEventListener("submit", async event => {
 // ==========================================
 
 async function sha256(value) {
-
   const encoded = new TextEncoder().encode(value);
 
   const hash = await crypto.subtle.digest(
@@ -692,110 +743,56 @@ async function sha256(value) {
     .join("");
 }
 
-$("loyaltyForm").addEventListener("submit", async event => {
+$("loyaltyForm")?.addEventListener(
+  "submit",
+  async event => {
+    event.preventDefault();
 
-  event.preventDefault();
-
-  const phone = normalizePhone(
-    $("loyaltyPhone").value
-  );
-
-  if (phone.length < 7) {
-    showMessage(
-      $("loyaltyMessage"),
-      "اكتب رقم موبايل صحيح.",
-      "error"
-    );
-    return;
-  }
-
-  const button = $("loyaltySearchButton");
-
-  button.disabled = true;
-  button.textContent = "جاري البحث...";
-
-  try {
-
-    const customerId = await sha256(phone);
-
-    const customerRef = doc(
-      db,
-      "customers",
-      customerId
+    const phone = normalizePhone(
+      $("loyaltyPhone").value
     );
 
-    const snapshot = await getDoc(customerRef);
-
-    if (!snapshot.exists()) {
-
-      $("loyaltyResult").hidden = true;
-
+    if (phone.length < 7) {
       showMessage(
         $("loyaltyMessage"),
-        "لسه مفيش زيارات مكتملة مسجلة بالرقم ده."
+        "اكتب رقم موبايل صحيح.",
+        "error"
       );
-
       return;
     }
 
-    const customer = snapshot.data();
-
-    const visits = Number(customer.visits || 0);
-    const rewards = Number(customer.rewards || 0);
-
-    $("loyaltyVisits").textContent = visits;
-    $("loyaltyRewards").textContent = rewards;
-
-    const remaining = 5 - (visits % 5);
-
-    $("loyaltyNextReward").textContent =
-      remaining === 5
-        ? "أنت تستحق مكافأة جديدة!"
-        : `فاضلك ${remaining} زيارة للمكافأة القادمة.`;
-
-    $("loyaltyResult").hidden = false;
-
     showMessage(
       $("loyaltyMessage"),
-      "تم العثور على حسابك.",
-      "success"
-    );
-
-  } catch (error) {
-
-    showMessage(
-      $("loyaltyMessage"),
-      "تعذر الاستعلام. حاول مرة تانية.",
+      "استعلام العملاء يحتاج تفعيل خدمة آمنة. برجاء التواصل مع الصالون.",
       "error"
     );
-
-    console.error(error);
-
-  } finally {
-
-    button.disabled = false;
-    button.textContent = "استعلام عن نقاطي";
   }
-
-});
+);
 
 
 // ==========================================
 // ADMIN PANEL OPEN / CLOSE
 // ==========================================
 
-$("adminAccess").addEventListener("click", () => {
+$("adminAccess")?.addEventListener("click", event => {
+  event.preventDefault();
 
-  $("adminPanel").hidden = false;
+  const panel = $("adminPanel");
 
-  $("adminPanel").scrollTo(0, 0);
+  if (panel) {
+    panel.hidden = false;
 
+    panel.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }
 });
 
-$("closeAdmin").addEventListener("click", () => {
-
-  $("adminPanel").hidden = true;
-
+$("closeAdmin")?.addEventListener("click", () => {
+  if ($("adminPanel")) {
+    $("adminPanel").hidden = true;
+  }
 });
 
 
@@ -803,71 +800,76 @@ $("closeAdmin").addEventListener("click", () => {
 // ADMIN LOGIN
 // ==========================================
 
-$("adminLoginForm").addEventListener("submit", async event => {
+$("adminLoginForm")?.addEventListener(
+  "submit",
+  async event => {
+    event.preventDefault();
 
-  event.preventDefault();
+    const button = $("adminLoginButton");
 
-  const button = $("adminLoginButton");
+    const email = $("adminEmail").value.trim();
+    const password = $("adminPassword").value;
 
-  const email = $("adminEmail").value.trim();
-  const password = $("adminPassword").value;
+    button.disabled = true;
+    button.textContent = "جاري تسجيل الدخول...";
 
-  button.disabled = true;
-  button.textContent = "جاري تسجيل الدخول...";
-
-  showMessage(
-    $("adminLoginMessage"),
-    "جاري الاتصال بحساب الإدارة..."
-  );
-
-  try {
-
-    const result = await signInWithEmailAndPassword(
-      auth,
-      email,
-      password
+    showMessage(
+      $("adminLoginMessage"),
+      "جاري الاتصال بحساب الإدارة..."
     );
 
-    if (!isAdminUser(result.user)) {
-
-      await signOut(auth);
-
-      throw new Error(
-        "الحساب ده مش مسموح له بدخول لوحة الإدارة."
+    try {
+      const result = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
       );
+
+      if (!isAdminUser(result.user)) {
+        await signOut(auth);
+
+        throw new Error(
+          "الحساب ده مش مسموح له بدخول لوحة الإدارة."
+        );
+      }
+
+      showMessage(
+        $("adminLoginMessage"),
+        "تم تسجيل الدخول بنجاح.",
+        "success"
+      );
+
+    } catch (error) {
+      console.error("Admin login error:", error);
+
+      let message = "فشل تسجيل الدخول.";
+
+      if (
+        error.code === "auth/invalid-credential" ||
+        error.code === "auth/wrong-password" ||
+        error.code === "auth/user-not-found"
+      ) {
+        message =
+          "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
+      } else if (error.code === "auth/too-many-requests") {
+        message =
+          "محاولات كتير. استنى شوية وحاول تاني.";
+      } else {
+        message = error.message || message;
+      }
+
+      showMessage(
+        $("adminLoginMessage"),
+        message,
+        "error"
+      );
+
+    } finally {
+      button.disabled = false;
+      button.textContent = "تسجيل الدخول";
     }
-
-    showMessage(
-      $("adminLoginMessage"),
-      "تم تسجيل الدخول بنجاح.",
-      "success"
-    );
-
-  } catch (error) {
-
-    let message = "فشل تسجيل الدخول.";
-
-    if (error.code === "auth/invalid-credential") {
-      message = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
-    } else if (error.code === "auth/too-many-requests") {
-      message = "محاولات كتير. استنى شوية وحاول تاني.";
-    } else {
-      message = error.message || message;
-    }
-
-    showMessage(
-      $("adminLoginMessage"),
-      message,
-      "error"
-    );
-
-  } finally {
-
-    button.disabled = false;
-    button.textContent = "تسجيل الدخول";
   }
-
-});
+);
 
 
 // ==========================================
@@ -875,23 +877,30 @@ $("adminLoginForm").addEventListener("submit", async event => {
 // ==========================================
 
 onAuthStateChanged(auth, user => {
-
   if (isAdminUser(user)) {
+    if ($("adminLogin")) {
+      $("adminLogin").hidden = true;
+    }
 
-    $("adminLogin").hidden = true;
-    $("adminDashboard").hidden = false;
+    if ($("adminDashboard")) {
+      $("adminDashboard").hidden = false;
+    }
 
     loadBookings();
 
   } else {
+    if ($("adminLogin")) {
+      $("adminLogin").hidden = false;
+    }
 
-    $("adminLogin").hidden = false;
-    $("adminDashboard").hidden = true;
+    if ($("adminDashboard")) {
+      $("adminDashboard").hidden = true;
+    }
 
-    $("bookingsList").innerHTML = "";
-
+    if ($("bookingsList")) {
+      $("bookingsList").innerHTML = "";
+    }
   }
-
 });
 
 
@@ -900,13 +909,13 @@ onAuthStateChanged(auth, user => {
 // ==========================================
 
 async function loadBookings() {
-
   const list = $("bookingsList");
+
+  if (!list) return;
 
   list.innerHTML = "<p>جاري تحميل الحجوزات...</p>";
 
   try {
-
     const q = query(
       collection(db, "bookings"),
       orderBy("createdAt", "desc")
@@ -915,15 +924,14 @@ async function loadBookings() {
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-
-      list.innerHTML = "<p>مفيش حجوزات لحد دلوقتي.</p>";
+      list.innerHTML =
+        "<p>مفيش حجوزات لحد دلوقتي.</p>";
       return;
     }
 
     list.innerHTML = "";
 
     snapshot.forEach(item => {
-
       const booking = item.data();
 
       const card = document.createElement("article");
@@ -939,7 +947,6 @@ async function loadBookings() {
 
       card.innerHTML = `
         <h4>${escapeHTML(booking.name)}</h4>
-
         <p>الموبايل: ${escapeHTML(booking.phone)}</p>
         <p>الحلاق: ${escapeHTML(booking.barber)}</p>
         <p>الخدمات: ${escapeHTML(booking.service)}</p>
@@ -950,7 +957,6 @@ async function loadBookings() {
         <p>الحالة: ${statusNames[booking.status] || "غير محدد"}</p>
 
         <div class="booking-admin-actions">
-
           <select class="booking-status">
             <option value="confirmed">مؤكد</option>
             <option value="new">جديد</option>
@@ -965,17 +971,21 @@ async function loadBookings() {
           <button type="button" class="delete-booking danger">
             حذف الحجز
           </button>
-
         </div>
       `;
 
-      const statusSelect = card.querySelector(".booking-status");
+      const statusSelect =
+        card.querySelector(".booking-status");
 
       statusSelect.value = booking.status || "confirmed";
 
       card.querySelector(".save-status").addEventListener(
         "click",
-        () => updateBookingStatus(item.id, booking, statusSelect.value)
+        () => updateBookingStatus(
+          item.id,
+          booking,
+          statusSelect.value
+        )
       );
 
       card.querySelector(".delete-booking").addEventListener(
@@ -984,7 +994,6 @@ async function loadBookings() {
       );
 
       list.appendChild(card);
-
     });
 
     showMessage(
@@ -994,6 +1003,7 @@ async function loadBookings() {
     );
 
   } catch (error) {
+    console.error("Load bookings error:", error);
 
     list.innerHTML =
       "<p>تعذر تحميل الحجوزات. راجع صلاحيات Firebase.</p>";
@@ -1003,10 +1013,7 @@ async function loadBookings() {
       error.message,
       "error"
     );
-
-    console.error(error);
   }
-
 }
 
 
@@ -1014,27 +1021,28 @@ async function loadBookings() {
 // ADMIN UPDATE BOOKING STATUS
 // ==========================================
 
-async function updateBookingStatus(id, booking, newStatus) {
-
+async function updateBookingStatus(
+  id,
+  booking,
+  newStatus
+) {
   if (!isAdminUser(auth.currentUser)) return;
 
   try {
-
     const bookingRef = doc(db, "bookings", id);
+
+    // لا نحتسب الزيارة مرتين عند إعادة الحفظ
+    if (
+      newStatus === "completed" &&
+      booking.status !== "completed"
+    ) {
+      await addCompletedVisit(booking.phone, id);
+    }
 
     await updateDoc(bookingRef, {
       status: newStatus,
       updatedAt: serverTimestamp()
     });
-
-    // عند اكتمال الزيارة نسجلها مرة واحدة
-    if (
-      newStatus === "completed" &&
-      booking.status !== "completed"
-    ) {
-
-      await addCompletedVisit(booking.phone);
-    }
 
     showMessage(
       $("adminStatus"),
@@ -1045,15 +1053,14 @@ async function updateBookingStatus(id, booking, newStatus) {
     await loadBookings();
 
   } catch (error) {
+    console.error(error);
 
     showMessage(
       $("adminStatus"),
       error.message,
       "error"
     );
-
   }
-
 }
 
 
@@ -1061,8 +1068,7 @@ async function updateBookingStatus(id, booking, newStatus) {
 // ADD COMPLETED VISIT
 // ==========================================
 
-async function addCompletedVisit(phone) {
-
+async function addCompletedVisit(phone, bookingId) {
   const normalized = normalizePhone(phone);
 
   const customerId = await sha256(normalized);
@@ -1073,18 +1079,33 @@ async function addCompletedVisit(phone) {
     customerId
   );
 
-  await runTransaction(db, async transaction => {
+  const visitRef = doc(
+    db,
+    "loyaltyVisits",
+    bookingId
+  );
 
-    const snapshot = await transaction.get(customerRef);
+  await runTransaction(db, async transaction => {
+    const visitSnapshot = await transaction.get(visitRef);
+
+    if (visitSnapshot.exists()) {
+      return;
+    }
+
+    const customerSnapshot =
+      await transaction.get(customerRef);
 
     let visits = 0;
     let rewards = 0;
 
-    if (snapshot.exists()) {
+    if (customerSnapshot.exists()) {
+      visits = Number(
+        customerSnapshot.data().visits || 0
+      );
 
-      visits = Number(snapshot.data().visits || 0);
-      rewards = Number(snapshot.data().rewards || 0);
-
+      rewards = Number(
+        customerSnapshot.data().rewards || 0
+      );
     }
 
     visits++;
@@ -1100,8 +1121,12 @@ async function addCompletedVisit(phone) {
       updatedAt: serverTimestamp()
     });
 
+    transaction.set(visitRef, {
+      bookingId,
+      customerId,
+      createdAt: serverTimestamp()
+    });
   });
-
 }
 
 
@@ -1110,7 +1135,6 @@ async function addCompletedVisit(phone) {
 // ==========================================
 
 async function deleteBooking(id, booking) {
-
   if (!isAdminUser(auth.currentUser)) return;
 
   const confirmed = confirm(
@@ -1120,24 +1144,16 @@ async function deleteBooking(id, booking) {
   if (!confirmed) return;
 
   try {
-
     const batch = writeBatch(db);
 
-    batch.delete(
-      doc(db, "bookings", id)
-    );
+    batch.delete(doc(db, "bookings", id));
 
-    // حذف خانات الموعد المحجوزة
     if (Array.isArray(booking.slotIds)) {
-
       booking.slotIds.forEach(slotId => {
-
         batch.delete(
           doc(db, "barberSlots", slotId)
         );
-
       });
-
     }
 
     await batch.commit();
@@ -1151,15 +1167,14 @@ async function deleteBooking(id, booking) {
     await loadBookings();
 
   } catch (error) {
+    console.error(error);
 
     showMessage(
       $("adminStatus"),
       error.message,
       "error"
     );
-
   }
-
 }
 
 
@@ -1167,40 +1182,47 @@ async function deleteBooking(id, booking) {
 // ADMIN LOGOUT
 // ==========================================
 
-$("adminLogout").addEventListener("click", async () => {
+$("adminLogout")?.addEventListener(
+  "click",
+  async () => {
+    try {
+      await signOut(auth);
 
-  try {
+      if ($("adminLogin")) {
+        $("adminLogin").hidden = false;
+      }
 
-    await signOut(auth);
+      if ($("adminDashboard")) {
+        $("adminDashboard").hidden = true;
+      }
 
-    $("adminLogin").hidden = false;
-    $("adminDashboard").hidden = true;
+      showMessage(
+        $("adminLoginMessage"),
+        "تم تسجيل الخروج."
+      );
 
-    showMessage(
-      $("adminLoginMessage"),
-      "تم تسجيل الخروج."
-    );
-
-  } catch (error) {
-
-    showMessage(
-      $("adminStatus"),
-      error.message,
-      "error"
-    );
-
+    } catch (error) {
+      showMessage(
+        $("adminStatus"),
+        error.message,
+        "error"
+      );
+    }
   }
-
-});
+);
 
 
 // ==========================================
 // APP READY
 // ==========================================
 
-console.log("FAHD KHALED SALON APP LOADED");
+console.log(
+  "FAHD KHALED SALON APP VERSION 21 LOADED"
+);
 
 showMessage(
   $("formMessage"),
   "الموقع جاهز للحجز."
 );
+
+calculateTotal();
