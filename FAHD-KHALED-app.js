@@ -1,0 +1,1050 @@
+// =====================================
+// FAHD KHALED SALON
+// Firebase + Booking Status + Admin + Loyalty
+// Phone-Based Loyalty + Safe Deletion
+// =====================================
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
+
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  where,
+  addDoc,
+  serverTimestamp,
+  query,
+  orderBy,
+  onSnapshot,
+  doc,
+  updateDoc,
+  getDoc,
+  setDoc,
+  runTransaction,
+  deleteDoc,
+  writeBatch
+} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
+
+// =====================================
+// Firebase Configuration
+// =====================================
+
+const firebaseConfig = {
+  apiKey: "AIzaSyByJ4mvTV4KwesCtd_9DZUCxmU8L_L7pvc",
+  authDomain: "fahd-khaled-salon-website.firebaseapp.com",
+  projectId: "fahd-khaled-salon-website",
+  storageBucket: "fahd-khaled-salon-website.firebasestorage.app",
+  messagingSenderId: "999874398926",
+  appId: "1:999874398926:web:60a841f71a579d1b7e5e9f"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+const ADMIN_UID = "n11bT3BtMaXwCWv2";
+
+// =====================================
+// القائمة والسنة
+// =====================================
+
+const menuToggle = document.getElementById("menuToggle");
+const nav = document.getElementById("mainNav");
+
+menuToggle?.addEventListener("click", () => {
+  const isOpen = nav?.classList.toggle("open");
+  menuToggle.setAttribute("aria-expanded", String(Boolean(isOpen)));
+});
+
+nav?.querySelectorAll("a").forEach(link => {
+  link.addEventListener("click", () => {
+    nav?.classList.remove("open");
+    menuToggle?.setAttribute("aria-expanded", "false");
+  });
+});
+
+const yearElement = document.getElementById("year");
+if (yearElement) yearElement.textContent = new Date().getFullYear();
+
+// =====================================
+// توحيد البيانات
+// =====================================
+
+function normalizePhone(phone) {
+  let value = String(phone || "").replace(/\D/g, "");
+
+  if (value.startsWith("0020")) {
+    value = value.slice(4);
+  } else if (value.startsWith("20") && value.length === 12) {
+    value = value.slice(2);
+  }
+
+  return value;
+}
+
+function normalizeName(name) {
+  return String(name || "")
+    .normalize("NFC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+async function createLegacyCustomerId(name, phone) {
+  const identity = normalizeName(name) + "|" + normalizePhone(phone);
+  const bytes = new TextEncoder().encode(identity);
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+
+  return Array.from(new Uint8Array(hash))
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function createCustomerId(phone) {
+  const identity = normalizePhone(phone);
+  const bytes = new TextEncoder().encode(identity);
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+
+  return Array.from(new Uint8Array(hash))
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+// كود متابعة عشوائي وصعب التخمين
+function createTrackingCode() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+
+  return Array.from(bytes)
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
+
+// =====================================
+// تحديد أقل تاريخ للحجز
+// =====================================
+
+const dateInput = document.querySelector('input[name="date"]');
+
+function setMinimumDate() {
+  if (!dateInput) return;
+
+  const today = new Date();
+  dateInput.min = new Date(
+    today.getTime() - today.getTimezoneOffset() * 60000
+  ).toISOString().slice(0, 10);
+}
+
+setMinimumDate();
+
+// =====================================
+// نظام الحجوزات + إنشاء كود المتابعة
+// =====================================
+
+const form = document.getElementById("bookingForm");
+const message = document.getElementById("formMessage");
+const submitButton = document.getElementById("submitBooking");
+const bookingCodeBox = document.getElementById("bookingCodeBox");
+const bookingTrackingCode = document.getElementById("bookingTrackingCode");
+
+// =====================================
+// الحجز الذكي: 3 حلاقين + فترات 15 دقيقة + مدة 45 دقيقة
+// كل حجز يقفل 3 فترات متتالية لضمان عدم التداخل.
+// =====================================
+const barberSelect = document.getElementById("barberSelect");
+const timeSelect = document.getElementById("timeSelect");
+const availabilityMessage = document.getElementById("availabilityMessage");
+const bookingTotal = document.getElementById("bookingTotal");
+const serviceChecks = [...document.querySelectorAll('input[name="services"]')];
+const BARBERS = {
+  fahd: "فهد خالد",
+  mohamed: "محمد هاني",
+  abdelrahman: "عبدالرحمن"
+};
+const pad2 = n => String(n).padStart(2, "0");
+const timeLabel = minutes => `${pad2(Math.floor((minutes % 1440) / 60))}:${pad2(minutes % 60)}`;
+const openingStarts = [];
+for (let m = 11 * 60; m <= 24 * 60 + 15; m += 15) openingStarts.push(m);
+function slotDocId(barberId, date, minutes) {
+  return `${barberId}_${date.replaceAll("-", "")}_${pad2(Math.floor(minutes/60)%24)}${pad2(minutes%60)}`;
+}
+function getSelectedServices() {
+  return serviceChecks.filter(x => x.checked).map(x => ({name:x.value, price:Number(x.dataset.price||0)}));
+}
+function refreshTotal() {
+  const services = getSelectedServices();
+  const total = services.reduce((sum,x)=>sum+x.price,0);
+  if (bookingTotal) bookingTotal.textContent = `الإجمالي: ${total} جنيه${services.some(x=>x.name==="فرد بروتين") ? " (سعر البروتين يبدأ من 400 وقد يتغير بعد المعاينة)" : ""}`;
+}
+serviceChecks.forEach(x=>x.addEventListener("change",refreshTotal));
+refreshTotal();
+
+async function refreshAvailableTimes() {
+  if (!dateInput || !barberSelect || !timeSelect) return;
+  const date = dateInput.value, barberId = barberSelect.value;
+  timeSelect.replaceChildren();
+  if (!date || !barberId) {
+    timeSelect.add(new Option("اختار الحلاق واليوم الأول", ""));
+    timeSelect.disabled = true;
+    return;
+  }
+  timeSelect.disabled = true;
+  timeSelect.add(new Option("جاري تحميل المواعيد...", ""));
+  try {
+    const q = query(collection(db,"barberSlots"), where("date","==",date));
+    const snap = await getDocs(q);
+    const occupied = new Set(snap.docs.map(d=>d.id));
+    const available = openingStarts.filter(m => {
+      const ids=[m,m+15,m+30].map(x=>slotDocId(barberId,date,x));
+      return ids.every(id=>!occupied.has(id));
+    });
+    timeSelect.replaceChildren();
+    timeSelect.add(new Option("اختار الموعد", ""));
+    available.forEach(m=>timeSelect.add(new Option(timeLabel(m),String(m))));
+    timeSelect.disabled = false;
+    if (available.length) {
+      availabilityMessage.textContent = `متاح ${available.length} موعد مع ${BARBERS[barberId]}. لو عنده حجوزات متتالية هتلاقي أقرب موعد بعد آخر عميل.`;
+    } else {
+      const other = Object.entries(BARBERS).filter(([id])=>id!==barberId).map(([id,name])=>name).join(" و");
+      availabilityMessage.textContent = `مفيش مواعيد متاحة مع ${BARBERS[barberId]} في اليوم ده. جرّب ${other} أو اختار يوم تاني.`;
+    }
+  } catch (error) {
+    console.error("Availability error",error);
+    timeSelect.replaceChildren(new Option("تعذر تحميل المواعيد", ""));
+    availabilityMessage.textContent = "حصل خطأ في تحميل المواعيد. راجع اتصال الإنترنت أو قواعد Firebase.";
+  }
+}
+barberSelect?.addEventListener("change",refreshAvailableTimes);
+dateInput?.addEventListener("change",refreshAvailableTimes);
+
+form?.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (message) message.textContent = "";
+  if (bookingCodeBox) bookingCodeBox.style.display = "none";
+  if (!form.reportValidity()) return;
+  const formData = new FormData(form);
+  const services = getSelectedServices();
+  if (!services.length) { message.textContent="اختار خدمة واحدة على الأقل."; return; }
+  const barberId=String(formData.get("barberId")||"");
+  const date=String(formData.get("date")||"");
+  const startMinutes=Number(formData.get("time"));
+  const name=String(formData.get("name")||"").trim();
+  const phone=String(formData.get("phone")||"").trim();
+  if (!BARBERS[barberId] || !Number.isFinite(startMinutes)) { message.textContent="اختار الحلاق والموعد المتاح."; return; }
+  if (name.length<2 || normalizePhone(phone).length<7) { message.textContent="راجع الاسم ورقم الموبايل من فضلك."; return; }
+  const slotIds=[startMinutes,startMinutes+15,startMinutes+30].map(m=>slotDocId(barberId,date,m));
+  const totalPrice=services.reduce((sum,x)=>sum+x.price,0);
+  const booking={name,phone,services,service:services.map(x=>x.name).join(" + "),totalPrice,barberId,barber:BARBERS[barberId],date,time:timeLabel(startMinutes),durationMinutes:45,notes:String(formData.get("notes")||"").trim().slice(0,500),status:"confirmed",slotIds,createdAt:serverTimestamp()};
+  if (submitButton) { submitButton.disabled=true; submitButton.textContent="جاري تأكيد الحجز..."; }
+  try {
+    const trackingCode=createTrackingCode();
+    const bookingRef=doc(collection(db,"bookings"));
+    const statusRef=doc(db,"bookingStatus",trackingCode);
+    const slotRefs=slotIds.map(id=>doc(db,"barberSlots",id));
+    await runTransaction(db,async tx=>{
+      const slotSnaps=[];
+      for (const ref of slotRefs) slotSnaps.push(await tx.get(ref));
+      if (slotSnaps.some(x=>x.exists())) throw new Error("SLOT_TAKEN");
+      tx.set(bookingRef,{...booking,trackingCode});
+      tx.set(statusRef,{status:"confirmed",service:booking.service,services,date,time:booking.time,barber:booking.barber,totalPrice});
+      slotRefs.forEach((ref,i)=>tx.set(ref,{barberId,date,minute:startMinutes+i*15,time:timeLabel(startMinutes+i*15),reserved:true}));
+    });
+    form.reset(); setMinimumDate(); refreshTotal(); await refreshAvailableTimes();
+    message.textContent="تم تأكيد حجزك بنجاح!";
+    if (bookingTrackingCode) bookingTrackingCode.textContent=trackingCode;
+    if (bookingCodeBox) { bookingCodeBox.style.display="block"; bookingCodeBox.scrollIntoView({behavior:"smooth",block:"center"}); }
+  } catch(error) {
+    console.error("Booking error",error);
+    if (message) message.textContent=error.message==="SLOT_TAKEN" ? "الموعد اتاخد من عميل تاني في نفس اللحظة. اختار الموعد اللي بعده." : "تعذر تأكيد الحجز. راجع قواعد Firebase وحاول تاني.";
+    await refreshAvailableTimes();
+  } finally {
+    if (submitButton) { submitButton.disabled=false; submitButton.textContent="تأكيد الحجز"; }
+  }
+});
+
+// =====================================
+// متابعة حالة الحجز للعميل
+// =====================================
+
+const trackingForm = document.getElementById("trackingForm");
+const trackingInput = document.getElementById("trackingInput");
+const trackingMessage = document.getElementById("trackingMessage");
+const trackingResult = document.getElementById("trackingResult");
+
+const bookingStatusLabels = {
+  new: "طلبك وصلنا وهو قيد المراجعة",
+  confirmed: "تم تأكيد حجزك",
+  rejected: "نعتذر، لم يتم قبول الحجز. تواصل مع الصالون",
+  completed: "تم تنفيذ الخدمة بنجاح"
+};
+
+trackingForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+
+  if (trackingMessage) trackingMessage.textContent = "";
+  if (trackingResult) trackingResult.style.display = "none";
+
+  const code = String(trackingInput?.value || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .toUpperCase();
+
+  if (!/^[A-F0-9]{32}$/.test(code)) {
+    if (trackingMessage) {
+      trackingMessage.textContent = "اكتب كود المتابعة المكوّن من 32 حرف ورقم بشكل صحيح.";
+    }
+    return;
+  }
+
+  const button = trackingForm.querySelector('button[type="submit"]');
+  if (button) {
+    button.disabled = true;
+    button.textContent = "جاري البحث...";
+  }
+
+  try {
+    const statusSnapshot = await getDoc(doc(db, "bookingStatus", code));
+
+    if (!statusSnapshot.exists()) {
+      if (trackingMessage) {
+        trackingMessage.textContent =
+          "مش لقينا حجز بالكود ده. راجع الكود وحاول تاني.";
+      }
+      return;
+    }
+
+    const data = statusSnapshot.data();
+
+    const statusElement = document.getElementById("trackingStatus");
+    const serviceElement = document.getElementById("trackingService");
+    const dateElement = document.getElementById("trackingDate");
+    const timeElement = document.getElementById("trackingTime");
+
+    if (statusElement) {
+      statusElement.textContent =
+        bookingStatusLabels[data.status] || "حالة الحجز غير معروفة";
+    }
+    if (serviceElement) serviceElement.textContent = (data.service || "-") + (data.barber ? " — الحلاق: " + data.barber : "") + (data.totalPrice ? " — الإجمالي: " + data.totalPrice + " جنيه" : "");
+    if (dateElement) dateElement.textContent = data.date || "-";
+    if (timeElement) timeElement.textContent = data.time || "-";
+
+    if (trackingResult) trackingResult.style.display = "block";
+    if (trackingMessage) trackingMessage.textContent = "تم العثور على طلب الحجز.";
+
+  } catch (error) {
+    console.error("Booking status lookup error:", error);
+    if (trackingMessage) {
+      trackingMessage.textContent = "حصل خطأ أثناء الاستعلام. حاول مرة تانية.";
+    }
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "استعلم عن حالة الحجز";
+    }
+  }
+});
+
+// =====================================
+// نسخ كود متابعة الحجز
+// =====================================
+
+document.getElementById("copyTrackingCode")?.addEventListener("click", async () => {
+  const code = bookingTrackingCode?.textContent?.trim();
+  if (!code) return;
+
+  try {
+    await navigator.clipboard.writeText(code);
+    const button = document.getElementById("copyTrackingCode");
+    const oldText = button.textContent;
+    button.textContent = "تم نسخ الكود ✓";
+    setTimeout(() => button.textContent = oldText, 1800);
+  } catch (error) {
+    alert("انسخ الكود يدويًا بالضغط المطوّل عليه.");
+  }
+});
+
+// =====================================
+// نظام استعلام العميل عن زياراته
+// البحث برقم الهاتف فقط
+// =====================================
+
+const loyaltyForm = document.getElementById("loyaltyForm");
+const loyaltyName = document.getElementById("loyaltyName");
+const loyaltyPhone = document.getElementById("loyaltyPhone");
+const loyaltyButton = document.getElementById("loyaltySearchButton");
+
+const loyaltyMessage = document.getElementById("loyaltyMessage");
+const loyaltyResult = document.getElementById("loyaltyResult");
+
+const loyaltyVisits = document.getElementById("loyaltyVisits");
+const loyaltyRewards = document.getElementById("loyaltyRewards");
+const loyaltyNextReward = document.getElementById("loyaltyNextReward");
+
+loyaltyName?.removeAttribute("required");
+
+loyaltyForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+
+  if (loyaltyMessage) loyaltyMessage.textContent = "";
+  if (loyaltyResult) loyaltyResult.style.display = "none";
+
+  const phone = loyaltyPhone?.value.trim() || "";
+
+  if (normalizePhone(phone).length < 7) {
+    loyaltyMessage.textContent = "من فضلك اكتب رقم الموبايل بشكل صحيح.";
+    return;
+  }
+
+  loyaltyButton.disabled = true;
+  loyaltyButton.textContent = "جاري البحث...";
+
+  try {
+    const customerId = await createCustomerId(phone);
+    const customerRef = doc(db, "customers", customerId);
+    const customerSnapshot = await getDoc(customerRef);
+
+    if (!customerSnapshot.exists()) {
+      loyaltyMessage.textContent =
+        "لم نجد زيارات مسجلة بالرقم ده. لو زرت الصالون قبل كده، تواصل معانا.";
+      return;
+    }
+
+    const data = customerSnapshot.data();
+    const visits = Number(data.visits || 0);
+    const earned = Number(data.rewardsEarned || 0);
+    const used = Number(data.rewardsUsed || 0);
+    const available = Math.max(0, earned - used);
+
+    loyaltyVisits.textContent = visits;
+    loyaltyRewards.textContent = available;
+
+    const nextVisit = visits > 0 && visits % 5 === 0
+      ? 5
+      : 5 - (visits % 5);
+
+    if (available > 0) {
+      loyaltyNextReward.textContent =
+        "🎁 مبروك! عندك " + available +
+        " مكافأة تنظيف بشرة VIP بخصم 50%.";
+    } else {
+      loyaltyNextReward.textContent =
+        "باقي لك " + nextVisit +
+        " زيارة مكتملة للحصول على مكافأة VIP القادمة.";
+    }
+
+    loyaltyResult.style.display = "block";
+    loyaltyMessage.textContent = "تم العثور على حسابك بنجاح.";
+
+  } catch (error) {
+    console.error("Loyalty search error:", error);
+    loyaltyMessage.textContent = "حصل خطأ أثناء البحث. حاول مرة تانية.";
+  } finally {
+    loyaltyButton.disabled = false;
+    loyaltyButton.textContent = "اعرف زياراتي ومكافآتي";
+  }
+});
+
+// =====================================
+// لوحة تحكم المدير
+// =====================================
+
+const adminPanel = document.getElementById("adminPanel");
+const adminAccess = document.getElementById("adminAccess");
+const adminLogin = document.getElementById("adminLogin");
+const adminDashboard = document.getElementById("adminDashboard");
+const adminLoginForm = document.getElementById("adminLoginForm");
+const adminEmail = document.getElementById("adminEmail");
+const adminPassword = document.getElementById("adminPassword");
+const adminLoginMessage = document.getElementById("adminLoginMessage");
+const adminLogout = document.getElementById("adminLogout");
+const adminStatus = document.getElementById("adminStatus");
+const bookingsList = document.getElementById("bookingsList");
+
+let unsubscribeBookings = null;
+
+adminAccess?.addEventListener("click", event => {
+  event.preventDefault();
+  if (!adminPanel) return;
+
+  adminPanel.style.display = "block";
+  adminPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+function showAdminMessage(text) {
+  if (adminLoginMessage) adminLoginMessage.textContent = text;
+}
+
+// =====================================
+// تسجيل دخول المدير
+// =====================================
+
+adminLoginForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+  showAdminMessage("جاري تسجيل الدخول...");
+
+  try {
+    const result = await signInWithEmailAndPassword(
+      auth,
+      adminEmail.value.trim(),
+      adminPassword.value
+    );
+
+    if (result.user.uid !== ADMIN_UID) {
+      await signOut(auth);
+      showAdminMessage("هذا الحساب غير مصرح له بدخول الإدارة.");
+      return;
+    }
+
+    showAdminMessage("تم تسجيل الدخول بنجاح.");
+    adminLoginForm.reset();
+
+  } catch (error) {
+    console.error("Login error:", error);
+
+    if (error.code === "auth/invalid-credential") {
+      showAdminMessage("البريد الإلكتروني أو كلمة المرور غير صحيحة.");
+    } else if (error.code === "auth/too-many-requests") {
+      showAdminMessage("محاولات كثيرة. حاول مرة أخرى لاحقًا.");
+    } else {
+      showAdminMessage("حدث خطأ أثناء تسجيل الدخول.");
+    }
+  }
+});
+
+// =====================================
+// إنشاء قسم إدارة المكافآت
+// =====================================
+
+let loyaltyAdminList = null;
+
+function createAdminLoyaltySection() {
+  if (loyaltyAdminList || !adminDashboard || !bookingsList) return;
+
+  const section = document.createElement("section");
+  section.style.cssText = `
+    margin:25px 0;
+    padding:18px;
+    background:#171717;
+    border:1px solid #c9a45c;
+    border-radius:12px;
+    color:white;
+  `;
+
+  const title = document.createElement("h3");
+  title.textContent = "⭐ ملفات العملاء ومكافآت VIP";
+  loyaltyAdminList = document.createElement("div");
+
+  section.append(title, loyaltyAdminList);
+  adminDashboard.insertBefore(section, bookingsList);
+}
+
+// =====================================
+// ترحيل السجلات القديمة وحفظ الزيارات
+// =====================================
+
+async function syncCustomerRecords(snapshot) {
+  const customers = new Map();
+
+  for (const item of snapshot.docs) {
+    const booking = item.data();
+    if (booking.status !== "completed") continue;
+
+    const phone = normalizePhone(booking.phone);
+    const name = normalizeName(booking.name);
+    if (!phone || !name) continue;
+
+    if (!customers.has(phone)) {
+      customers.set(phone, { phone, bookings: [], legacyIds: new Set() });
+    }
+
+    const customer = customers.get(phone);
+    customer.bookings.push({ id: item.id, data: booking });
+
+    const legacyId = await createLegacyCustomerId(booking.name, booking.phone);
+    customer.legacyIds.add(legacyId);
+  }
+
+  const result = new Map();
+
+  for (const [phone, customer] of customers) {
+    const customerId = await createCustomerId(phone);
+    const customerRef = doc(db, "customers", customerId);
+
+    await runTransaction(db, async transaction => {
+      const currentSnapshot = await transaction.get(customerRef);
+      const currentData = currentSnapshot.exists() ? currentSnapshot.data() : {};
+
+      let visits = Number(currentData.visits || 0);
+      let rewardsUsed = Number(currentData.rewardsUsed || 0);
+
+      const processed = new Set(
+        Array.isArray(currentData.completedBookingIds)
+          ? currentData.completedBookingIds
+          : []
+      );
+
+      if (!currentData.legacyMigrated) {
+        const legacyRefs = [];
+
+        for (const legacyId of customer.legacyIds) {
+          if (legacyId !== customerId) {
+            legacyRefs.push(doc(db, "customers", legacyId));
+          }
+        }
+
+        const legacySnapshots = [];
+        for (const legacyRef of legacyRefs) {
+          legacySnapshots.push(await transaction.get(legacyRef));
+        }
+
+        let legacyVisits = 0;
+        let legacyUsed = 0;
+        let foundLegacy = false;
+
+        for (const legacySnapshot of legacySnapshots) {
+          if (!legacySnapshot.exists()) continue;
+          foundLegacy = true;
+          const oldData = legacySnapshot.data();
+          legacyVisits += Number(oldData.visits || 0);
+          legacyUsed += Number(oldData.rewardsUsed || 0);
+        }
+
+        if (foundLegacy) {
+          visits = Math.max(visits, legacyVisits);
+          rewardsUsed = Math.max(rewardsUsed, legacyUsed);
+        } else if (!currentSnapshot.exists()) {
+          visits = customer.bookings.length;
+        }
+
+        for (const booking of customer.bookings) processed.add(booking.id);
+
+        const rewardsEarned = Math.max(
+          Number(currentData.rewardsEarned || 0),
+          Math.floor(visits / 5)
+        );
+
+        transaction.set(customerRef, {
+          visits,
+          rewardsEarned,
+          rewardsUsed,
+          completedBookingIds: Array.from(processed),
+          legacyMigrated: true,
+          updatedAt: serverTimestamp()
+        });
+        return;
+      }
+
+      let changed = false;
+
+      for (const booking of customer.bookings) {
+        if (processed.has(booking.id)) continue;
+        processed.add(booking.id);
+        visits++;
+        changed = true;
+      }
+
+      const rewardsEarned = Math.max(
+        Number(currentData.rewardsEarned || 0),
+        Math.floor(visits / 5)
+      );
+
+      if (changed || !currentSnapshot.exists()) {
+        transaction.set(customerRef, {
+          visits,
+          rewardsEarned,
+          rewardsUsed,
+          completedBookingIds: Array.from(processed),
+          legacyMigrated: true,
+          updatedAt: serverTimestamp()
+        });
+      }
+    });
+
+    const latest = await getDoc(customerRef);
+    if (latest.exists()) result.set(customerId, latest.data());
+  }
+
+  return result;
+}
+
+// =====================================
+// عرض العملاء والمكافآت في لوحة الإدارة
+// =====================================
+
+async function renderAdminCustomers(customers) {
+  createAdminLoyaltySection();
+  if (!loyaltyAdminList) return;
+
+  loyaltyAdminList.replaceChildren();
+
+  if (customers.size === 0) {
+    loyaltyAdminList.textContent = "لا توجد زيارات مكتملة حتى الآن.";
+    return;
+  }
+
+  for (const [customerId, data] of customers) {
+    const customerRef = doc(db, "customers", customerId);
+    const visits = Number(data.visits || 0);
+    const earned = Number(data.rewardsEarned || 0);
+    const used = Number(data.rewardsUsed || 0);
+    const available = Math.max(0, earned - used);
+
+    const card = document.createElement("div");
+    card.style.cssText = `
+      background:#242018;
+      border:1px solid #65502d;
+      padding:15px;
+      margin:12px 0;
+      border-radius:10px;
+    `;
+
+    const title = document.createElement("h4");
+    title.textContent = "عميل رقم " + customerId.slice(0, 8);
+
+    const visitsText = document.createElement("p");
+    visitsText.textContent = "الزيارات المكتملة: " + visits;
+
+    const rewardsText = document.createElement("p");
+    rewardsText.textContent = "المكافآت المتاحة: " + available;
+
+    const usedText = document.createElement("p");
+    usedText.textContent = "المكافآت المستخدمة: " + used;
+
+    card.append(title, visitsText, rewardsText, usedText);
+
+    if (available > 0) {
+      const redeemButton = document.createElement("button");
+      redeemButton.type = "button";
+      redeemButton.textContent = "تسجيل استخدام تنظيف البشرة VIP";
+      redeemButton.style.cssText = `
+        background:#c9a45c;
+        color:#111;
+        border:0;
+        padding:12px;
+        border-radius:7px;
+        font-weight:bold;
+        margin-top:8px;
+        cursor:pointer;
+      `;
+
+      redeemButton.addEventListener("click", async () => {
+        if (!confirm("هل تم استخدام مكافأة تنظيف البشرة VIP؟")) return;
+
+        redeemButton.disabled = true;
+        redeemButton.textContent = "جاري التسجيل...";
+
+        try {
+          await runTransaction(db, async transaction => {
+            const latestSnapshot = await transaction.get(customerRef);
+            if (!latestSnapshot.exists()) throw new Error("Customer not found");
+
+            const latest = latestSnapshot.data();
+            const latestAvailable =
+              Number(latest.rewardsEarned || 0) -
+              Number(latest.rewardsUsed || 0);
+
+            if (latestAvailable <= 0) throw new Error("No rewards available");
+
+            transaction.update(customerRef, {
+              rewardsUsed: Number(latest.rewardsUsed || 0) + 1,
+              updatedAt: serverTimestamp()
+            });
+          });
+
+          alert("تم تسجيل استخدام المكافأة بنجاح.");
+          const updatedSnapshot = await getDoc(customerRef);
+          if (updatedSnapshot.exists()) customers.set(customerId, updatedSnapshot.data());
+          await renderAdminCustomers(customers);
+
+        } catch (error) {
+          console.error("Reward redemption error:", error);
+          alert(
+            error.message === "No rewards available"
+              ? "لا توجد مكافآت متاحة."
+              : "تعذر تسجيل استخدام المكافأة."
+          );
+          redeemButton.disabled = false;
+          redeemButton.textContent = "تسجيل استخدام تنظيف البشرة VIP";
+        }
+      });
+
+      card.appendChild(redeemButton);
+    }
+
+    loyaltyAdminList.appendChild(card);
+  }
+}
+
+// =====================================
+// تحديث الحجز وحالة المتابعة معًا
+// =====================================
+
+async function updateBookingStatus(bookingId, booking, newStatus) {
+  const batch = writeBatch(db);
+  const bookingRef = doc(db, "bookings", bookingId);
+
+  batch.update(bookingRef, { status: newStatus });
+
+  if (booking.trackingCode) {
+    const statusRef = doc(db, "bookingStatus", booking.trackingCode);
+    const statusSnapshot = await getDoc(statusRef);
+
+    if (statusSnapshot.exists()) {
+      batch.update(statusRef, { status: newStatus });
+    }
+  }
+
+  await batch.commit();
+  if (newStatus === "rejected" && Array.isArray(booking.slotIds)) {
+    const release = writeBatch(db);
+    booking.slotIds.forEach(id => release.delete(doc(db,"barberSlots",id)));
+    await release.commit();
+  }
+}
+
+async function deleteBookingAndTracking(bookingId, booking) {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "bookings", bookingId));
+
+  if (booking.trackingCode) {
+    const statusRef = doc(db, "bookingStatus", booking.trackingCode);
+    const statusSnapshot = await getDoc(statusRef);
+
+    if (statusSnapshot.exists()) batch.delete(statusRef);
+  }
+
+  await batch.commit();
+  if (Array.isArray(booking.slotIds)) {
+    const release = writeBatch(db);
+    booking.slotIds.forEach(id => release.delete(doc(db,"barberSlots",id)));
+    await release.commit();
+  }
+}
+
+// =====================================
+// تحميل الحجوزات
+// =====================================
+
+function loadBookings() {
+  if (!bookingsList || !adminStatus) return;
+
+  if (unsubscribeBookings) {
+    unsubscribeBookings();
+    unsubscribeBookings = null;
+  }
+
+  adminStatus.textContent = "جاري تحميل الحجوزات...";
+  bookingsList.replaceChildren();
+
+  const bookingsQuery = query(
+    collection(db, "bookings"),
+    orderBy("createdAt", "desc")
+  );
+
+  unsubscribeBookings = onSnapshot(
+    bookingsQuery,
+    async snapshot => {
+      bookingsList.replaceChildren();
+
+      try {
+        const customers = await syncCustomerRecords(snapshot);
+        await renderAdminCustomers(customers);
+      } catch (error) {
+        console.error("Customer sync error:", error);
+        adminStatus.textContent =
+          "تعذر تحديث ملفات العملاء. راجع صلاحيات Firebase.";
+        return;
+      }
+
+      if (snapshot.empty) {
+        adminStatus.textContent = "لا توجد حجوزات حتى الآن.";
+        return;
+      }
+
+      adminStatus.textContent = "عدد طلبات الحجز: " + snapshot.size;
+
+      snapshot.forEach(bookingDoc => {
+        const booking = bookingDoc.data();
+        const card = document.createElement("div");
+
+        card.style.cssText = `
+          background:#171717;
+          border:1px solid #c9a45c;
+          border-radius:12px;
+          padding:18px;
+          margin:15px 0;
+          color:white;
+          text-align:right;
+        `;
+
+        const title = document.createElement("h3");
+        title.textContent = booking.name || "بدون اسم";
+
+        const details = document.createElement("div");
+        const rows = [
+          ["رقم الموبايل", booking.phone],
+          ["الحلاق", booking.barber || "-"],
+          ["الخدمات", booking.service || (booking.services || []).map(x=>x.name).join(" + ")],
+          ["الإجمالي", booking.totalPrice ? booking.totalPrice + " جنيه" : "-"],
+          ["اليوم", booking.date],
+          ["الوقت", booking.time],
+          ["ملاحظات", booking.notes || "لا توجد"],
+          ["كود المتابعة", booking.trackingCode || "حجز قديم بدون كود"]
+        ];
+
+        rows.forEach(([label, value]) => {
+          const p = document.createElement("p");
+          p.textContent = label + ": " + (value || "-");
+          details.appendChild(p);
+        });
+
+        const statusLabel = document.createElement("label");
+        statusLabel.textContent = "حالة الحجز: ";
+
+        const select = document.createElement("select");
+        select.style.cssText = `
+          padding:10px;
+          margin:8px;
+          border-radius:6px;
+          max-width:100%;
+        `;
+
+        const statuses = [
+          ["new", "حجز جديد"],
+          ["confirmed", "تم تأكيد الحجز"],
+          ["rejected", "تم رفض الحجز"],
+          ["completed", "تم تنفيذ الخدمة"]
+        ];
+
+        statuses.forEach(([value, label]) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = label;
+          select.appendChild(option);
+        });
+
+        select.value = booking.status || "new";
+
+        const saveButton = document.createElement("button");
+        saveButton.type = "button";
+        saveButton.textContent = "حفظ الحالة";
+        saveButton.style.cssText = `
+          background:#c9a45c;
+          color:#111;
+          border:0;
+          padding:10px 18px;
+          border-radius:6px;
+          cursor:pointer;
+          margin:8px;
+          font-weight:bold;
+        `;
+
+        saveButton.addEventListener("click", async () => {
+          saveButton.disabled = true;
+          saveButton.textContent = "جاري الحفظ...";
+
+          try {
+            await updateBookingStatus(bookingDoc.id, booking, select.value);
+            saveButton.textContent = "تم الحفظ ✓";
+          } catch (error) {
+            console.error("Update error:", error);
+            saveButton.textContent = "فشل الحفظ";
+            alert("تعذر تحديث حالة الحجز. تأكد من نشر القواعد وتجربة حجز جديد.");
+          } finally {
+            saveButton.disabled = false;
+          }
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.textContent = "🗑 حذف الحجز";
+        deleteButton.style.cssText = `
+          background:#8b2525;
+          color:white;
+          border:0;
+          padding:10px 18px;
+          border-radius:6px;
+          cursor:pointer;
+          margin:8px;
+          font-weight:bold;
+        `;
+
+        deleteButton.addEventListener("click", async () => {
+          const confirmed = confirm(
+            "هل أنت متأكد من حذف الحجز؟\n\nسجل زيارات العميل ومكافآته لن يتم حذفه."
+          );
+          if (!confirmed) return;
+
+          deleteButton.disabled = true;
+          deleteButton.textContent = "جاري الحذف...";
+
+          try {
+            await deleteBookingAndTracking(bookingDoc.id, booking);
+            alert("تم حذف الحجز. سجل زيارات العميل ومكافآته محفوظ.");
+          } catch (error) {
+            console.error("Delete booking error:", error);
+            alert("تعذر حذف الحجز.");
+            deleteButton.disabled = false;
+            deleteButton.textContent = "🗑 حذف الحجز";
+          }
+        });
+
+        statusLabel.appendChild(select);
+        card.append(title, details, statusLabel, saveButton, deleteButton);
+        bookingsList.appendChild(card);
+      });
+    },
+    error => {
+      console.error("Bookings error:", error);
+      adminStatus.textContent =
+        "تعذر تحميل الحجوزات. راجع صلاحيات قاعدة البيانات.";
+    }
+  );
+}
+
+// =====================================
+// متابعة تسجيل دخول المدير
+// =====================================
+
+onAuthStateChanged(auth, user => {
+  if (user && user.uid === ADMIN_UID) {
+    if (adminLogin) adminLogin.style.display = "none";
+    if (adminDashboard) adminDashboard.style.display = "block";
+
+    createAdminLoyaltySection();
+    loadBookings();
+  } else {
+    if (unsubscribeBookings) {
+      unsubscribeBookings();
+      unsubscribeBookings = null;
+    }
+
+    if (adminLogin) adminLogin.style.display = "block";
+    if (adminDashboard) adminDashboard.style.display = "none";
+    if (bookingsList) bookingsList.replaceChildren();
+    if (loyaltyAdminList) loyaltyAdminList.replaceChildren();
+  }
+});
+
+// =====================================
+// تسجيل الخروج
+// =====================================
+
+adminLogout?.addEventListener("click", async () => {
+  try {
+    await signOut(auth);
+    showAdminMessage("تم تسجيل الخروج.");
+    adminPanel?.scrollIntoView({ behavior: "smooth" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    alert("تعذر تسجيل الخروج.");
+  }
+});
