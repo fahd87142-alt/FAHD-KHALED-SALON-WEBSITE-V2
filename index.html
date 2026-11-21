@@ -2,33 +2,33 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101010">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#111111">
+
   <title>FAHD KHALED SALON | صالون فهد خالد</title>
-  <meta name="description" content="صالون فهد خالد للحلاقة والعناية الرجالية. احجز موعدك بسهولة.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20">
+
+  <meta name="description" content="احجز موعدك في صالون فهد خالد للحلاقة والعناية الرجالي.">
+
+  <link rel="stylesheet" href="styles.css?v=1">
 </head>
 
 <body>
 
 <header class="header">
-  <a href="#home" class="brand">
-    <span class="brand-mark">FK</span>
-    <span>
-      <strong>FAHD KHALED</strong>
+  <div class="logo">
+    <span>FK</span>
+    <div>
+      <h2>FAHD KHALED</h2>
       <small>SALON</small>
-    </span>
-  </a>
+    </div>
+  </div>
 
-  <button class="menu-toggle" id="menuToggle" aria-label="القائمة">☰</button>
+  <button id="menuToggle" type="button">☰</button>
 
   <nav id="mainNav">
     <a href="#home">الرئيسية</a>
     <a href="#services">خدماتنا</a>
     <a href="#booking">احجز موعدك</a>
-    <a href="#loyalty">العملاء المميزون</a>
     <a href="#contact">تواصل معنا</a>
   </nav>
 </header>
@@ -37,218 +37,207 @@
 
 <section class="hero" id="home">
   <div class="hero-content">
-    <div class="eyebrow">FAHD KHALED SALON</div>
-    <h1>أناقتك تبدأ<br><span>من هنا</span></h1>
-    <p>تجربة حلاقة وعناية رجالي باهتمام بالتفاصيل، وخدمة تليق بيك.</p>
-    <div class="hero-buttons">
-      <a href="#booking" class="button button-gold">احجز موعدك</a>
-      <a href="#services" class="button button-outline">اكتشف خدماتنا</a>
-    </div>
+    <span class="gold-text">STYLE · CARE · CONFIDENCE</span>
+    <h1>أناقتك تبدأ<br>من هنا</h1>
+    <p>
+      تجربة حلاقة وعناية رجالي باهتمام بالتفاصيل،
+      وخدمة تليق بيك.
+    </p>
+    <a href="#booking" class="main-btn">احجز موعدك</a>
   </div>
-  <div class="hero-decoration">FK</div>
 </section>
 
 <section class="section" id="services">
-  <div class="section-heading">
-    <span>OUR SERVICES</span>
-    <h2>خدماتنا وأسعارنا</h2>
-    <p>اختار الخدمة المناسبة ليك.</p>
-  </div>
+  <h2>خدماتنا</h2>
+  <p class="section-desc">اختار الخدمة المناسبة ليك</p>
 
   <div class="services-grid">
-    <article class="service-card"><h3>قص شعر</h3><strong>120 جنيه</strong></article>
-    <article class="service-card"><h3>قص دقن</h3><strong>100 جنيه</strong></article>
-    <article class="service-card"><h3>استشوار</h3><strong>80 جنيه</strong></article>
-    <article class="service-card"><h3>حلاقة طفل</h3><strong>100 جنيه</strong></article>
-    <article class="service-card"><h3>واكس شمع</h3><strong>100 جنيه</strong></article>
-    <article class="service-card"><h3>حمام زيت</h3><strong>100 جنيه</strong></article>
-    <article class="service-card"><h3>فرد عادي</h3><strong>100 جنيه</strong></article>
-    <article class="service-card"><h3>فرد بروتين</h3><strong>يبدأ من 400 جنيه</strong></article>
-    <article class="service-card"><h3>صبغة شعر</h3><strong>100 جنيه</strong></article>
-    <article class="service-card"><h3>صبغة دقن</h3><strong>50 جنيه</strong></article>
-    <article class="service-card"><h3>صبغة أبيض / سلفر</h3><strong>350 جنيه</strong></article>
-    <article class="service-card"><h3>جلسة بشرة 1</h3><strong>150 جنيه</strong></article>
-    <article class="service-card"><h3>جلسة بشرة 2</h3><strong>250 جنيه</strong></article>
-    <article class="service-card"><h3>جلسة بشرة 3</h3><strong>400 جنيه</strong></article>
+
+    <div class="service-card">قص شعر <b>120 جنيه</b></div>
+    <div class="service-card">قص دقن <b>100 جنيه</b></div>
+    <div class="service-card">استشوار <b>80 جنيه</b></div>
+    <div class="service-card">حلاقة طفل <b>100 جنيه</b></div>
+    <div class="service-card">واكس شمع <b>100 جنيه</b></div>
+    <div class="service-card">حمام زيت <b>100 جنيه</b></div>
+    <div class="service-card">فرد عادي <b>100 جنيه</b></div>
+    <div class="service-card">فرد بروتين <b>يبدأ من 400 جنيه</b></div>
+    <div class="service-card">صبغة شعر <b>100 جنيه</b></div>
+    <div class="service-card">صبغة دقن <b>50 جنيه</b></div>
+    <div class="service-card">صبغة أبيض / سلفر <b>350 جنيه</b></div>
+    <div class="service-card">جلسة بشرة 1 <b>150 جنيه</b></div>
+    <div class="service-card">جلسة بشرة 2 <b>250 جنيه</b></div>
+    <div class="service-card">جلسة بشرة 3 <b>400 جنيه</b></div>
+
   </div>
 </section>
 
 <section class="section booking-section" id="booking">
-  <div class="section-heading">
-    <span>BOOK YOUR APPOINTMENT</span>
-    <h2>احجز موعدك</h2>
-    <p>اختار الحلاق والخدمات والموعد المناسب ليك.</p>
-  </div>
 
-  <form id="bookingForm" class="booking-form">
+  <h2>احجز موعدك</h2>
+  <p class="section-desc">احجز بسهولة واختار الموعد المناسب ليك</p>
 
-    <div class="form-group">
-      <label for="customerName">الاسم بالكامل</label>
-      <input id="customerName" name="name" type="text" minlength="2" maxlength="70" required placeholder="اكتب اسمك">
+  <form id="bookingForm">
+
+    <label for="customerName">الاسم بالكامل</label>
+    <input id="customerName" type="text" required
+      placeholder="اكتب اسمك">
+
+    <label for="customerPhone">رقم الموبايل</label>
+    <input id="customerPhone" type="tel" required
+      placeholder="01xxxxxxxxx">
+
+    <label for="barberSelect">اختار الحلاق</label>
+    <select id="barberSelect" required>
+      <option value="">اختار الحلاق</option>
+      <option value="فهد خالد">فهد خالد</option>
+      <option value="محمد هاني">محمد هاني</option>
+      <option value="عبدالرحمن">عبدالرحمن</option>
+    </select>
+
+    <label>اختار الخدمات</label>
+
+    <div id="serviceChoices" class="service-choices">
+
+      <label><input type="checkbox" value="قص شعر" data-price="120"> قص شعر - 120 جنيه</label>
+      <label><input type="checkbox" value="قص دقن" data-price="100"> قص دقن - 100 جنيه</label>
+      <label><input type="checkbox" value="استشوار" data-price="80"> استشوار - 80 جنيه</label>
+      <label><input type="checkbox" value="حلاقة طفل" data-price="100"> حلاقة طفل - 100 جنيه</label>
+      <label><input type="checkbox" value="واكس شمع" data-price="100"> واكس شمع - 100 جنيه</label>
+      <label><input type="checkbox" value="حمام زيت" data-price="100"> حمام زيت - 100 جنيه</label>
+      <label><input type="checkbox" value="فرد عادي" data-price="100"> فرد عادي - 100 جنيه</label>
+      <label><input type="checkbox" value="فرد بروتين" data-price="400"> فرد بروتين - يبدأ من 400 جنيه</label>
+      <label><input type="checkbox" value="صبغة شعر" data-price="100"> صبغة شعر - 100 جنيه</label>
+      <label><input type="checkbox" value="صبغة دقن" data-price="50"> صبغة دقن - 50 جنيه</label>
+      <label><input type="checkbox" value="صبغة أبيض / سلفر" data-price="350"> صبغة أبيض / سلفر - 350 جنيه</label>
+      <label><input type="checkbox" value="جلسة بشرة 1" data-price="150"> جلسة بشرة 1 - 150 جنيه</label>
+      <label><input type="checkbox" value="جلسة بشرة 2" data-price="250"> جلسة بشرة 2 - 250 جنيه</label>
+      <label><input type="checkbox" value="جلسة بشرة 3" data-price="400"> جلسة بشرة 3 - 400 جنيه</label>
+
     </div>
 
-    <div class="form-group">
-      <label for="customerPhone">رقم الموبايل</label>
-      <input id="customerPhone" name="phone" type="tel" maxlength="20" required placeholder="رقم الموبايل">
-    </div>
-
-    <div class="form-group">
-      <label for="barberSelect">اختار الحلاق</label>
-      <select id="barberSelect" name="barber" required>
-        <option value="">اختار الحلاق</option>
-        <option value="فهد خالد">فهد خالد</option>
-        <option value="محمد هاني">محمد هاني</option>
-        <option value="عبدالرحمن">عبدالرحمن</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label>اختار الخدمات المطلوبة</label>
-      <div id="serviceChoices" class="service-choices">
-
-        <label class="service-option"><input type="checkbox" value="قص شعر" data-price="120"><span>قص شعر</span><b>120 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="قص دقن" data-price="100"><span>قص دقن</span><b>100 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="استشوار" data-price="80"><span>استشوار</span><b>80 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="حلاقة طفل" data-price="100"><span>حلاقة طفل</span><b>100 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="واكس شمع" data-price="100"><span>واكس شمع</span><b>100 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="حمام زيت" data-price="100"><span>حمام زيت</span><b>100 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="فرد عادي" data-price="100"><span>فرد عادي</span><b>100 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="فرد بروتين" data-price="400"><span>فرد بروتين (يبدأ من)</span><b>400 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="صبغة شعر" data-price="100"><span>صبغة شعر</span><b>100 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="صبغة دقن" data-price="50"><span>صبغة دقن</span><b>50 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="صبغة أبيض / سلفر" data-price="350"><span>صبغة أبيض / سلفر</span><b>350 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="جلسة بشرة 1" data-price="150"><span>جلسة بشرة 1</span><b>150 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="جلسة بشرة 2" data-price="250"><span>جلسة بشرة 2</span><b>250 جنيه</b></label>
-        <label class="service-option"><input type="checkbox" value="جلسة بشرة 3" data-price="400"><span>جلسة بشرة 3</span><b>400 جنيه</b></label>
-
-      </div>
-    </div>
+    <div id="selectedServicesSummary"></div>
 
     <div class="total-box">
-      <span>إجمالي الخدمات</span>
-      <strong id="bookingTotal">0 جنيه</strong>
-      <div id="selectedServicesSummary">لم يتم اختيار خدمات بعد</div>
-      <small>سعر البروتين يبدأ من 400 جنيه، وقد يتغير بعد معاينة الشعر.</small>
+      الإجمالي:
+      <strong id="bookingTotal">0</strong>
+      جنيه
     </div>
 
-    <div class="form-group">
-      <label for="bookingDate">تاريخ الحجز</label>
-      <input id="bookingDate" name="date" type="date" required>
-    </div>
+    <label for="bookingDate">اختار التاريخ</label>
+    <input id="bookingDate" type="date" required>
 
-    <div class="form-group">
-      <label for="bookingTime">الوقت المتاح</label>
-      <select id="bookingTime" name="time" required disabled>
-        <option value="">اختار الحلاق والتاريخ أولاً</option>
-      </select>
-      <div id="availabilityMessage" class="message"></div>
-    </div>
+    <label for="bookingTime">اختار الموعد</label>
+    <select id="bookingTime" required disabled>
+      <option value="">اختار الحلاق والتاريخ أولاً</option>
+    </select>
 
-    <div class="form-group">
-      <label for="bookingNotes">ملاحظات إضافية (اختياري)</label>
-      <textarea id="bookingNotes" name="notes" maxlength="500" rows="3" placeholder="أي تفاصيل تحب تضيفها"></textarea>
-    </div>
+    <div id="availabilityMessage"></div>
 
-    <button id="submitBooking" class="button button-gold full-button" type="submit">
+    <label for="bookingNotes">ملاحظات إضافية</label>
+    <textarea id="bookingNotes" maxlength="500"
+      placeholder="اكتب أي ملاحظات (اختياري)"></textarea>
+
+    <button type="submit" id="submitBooking" class="main-btn">
       تأكيد الحجز
     </button>
 
-    <div id="formMessage" class="message" role="status"></div>
+    <div id="formMessage"></div>
 
-    <div id="bookingConfirmation" class="confirmation-box" hidden>
-      <h3>تم تأكيد حجزك بنجاح ✓</h3>
-      <p id="confirmationDetails"></p>
-      <p>مستنيينك في صالون فهد خالد ❤️</p>
+    <div id="bookingConfirmation" hidden>
+      <h3>تم تسجيل حجزك بنجاح</h3>
+      <div id="confirmationDetails"></div>
     </div>
 
   </form>
 </section>
 
-<section class="section loyalty-section" id="loyalty">
-  <div class="section-heading">
-    <span>VIP CLIENTS</span>
-    <h2>برنامج العملاء المميزين</h2>
-    <p>كل 5 زيارات مكتملة تمنحك خصم 50% على تنظيف البشرة.</p>
-  </div>
+<section class="section loyalty-section">
+  <h2>برنامج VIP</h2>
+  <p>كل 5 زيارات مكتملة تحصل على خصم 50% على تنظيف البشرة.</p>
 
-  <div class="loyalty-card">
-    <form id="loyaltyForm">
-      <label for="loyaltyPhone">رقم الموبايل</label>
-      <input id="loyaltyPhone" type="tel" required placeholder="اكتب رقم موبايلك">
-      <button class="button button-gold full-button" type="submit" id="loyaltySearchButton">استعلام عن نقاطي</button>
-    </form>
-    <div id="loyaltyMessage" class="message"></div>
-    <div id="loyaltyResult" hidden>
-      <h3>حساب العميل</h3>
-      <p>الزيارات المكتملة: <strong id="loyaltyVisits">0</strong></p>
-      <p>المكافآت المتاحة: <strong id="loyaltyRewards">0</strong></p>
-      <p id="loyaltyNextReward"></p>
-    </div>
+  <form id="loyaltyForm">
+    <label for="loyaltyPhone">رقم الموبايل</label>
+    <input id="loyaltyPhone" type="tel" placeholder="رقم الموبايل">
+    <button id="loyaltySearchButton" type="submit" class="main-btn">
+      استعلام
+    </button>
+  </form>
+
+  <div id="loyaltyMessage"></div>
+  <div id="loyaltyResult" hidden>
+    <p>الزيارات: <span id="loyaltyVisits">0</span></p>
+    <p>المكافآت: <span id="loyaltyRewards">0</span></p>
+    <p id="loyaltyNextReward"></p>
   </div>
 </section>
 
 <section class="section contact-section" id="contact">
-  <div class="section-heading">
-    <span>CONTACT US</span>
-    <h2>تواصل معنا</h2>
-    <p>يسعدنا زيارتك والتواصل معاك.</p>
-  </div>
+  <h2>تواصل معنا</h2>
+  <p>يسعدنا استقبال رسائلك واستفساراتك</p>
 
-  <div class="contact-card">
-    <p><strong>FAHD KHALED SALON</strong></p>
-    <p>للحجز والاستفسار</p>
-    <a class="button button-gold" href="https://wa.me/201094044076" target="_blank" rel="noopener">تواصل واتساب</a>
-  </div>
+  <a class="main-btn"
+     href="https://wa.me/201094044076"
+     target="_blank">
+    تواصل عبر واتساب
+  </a>
 </section>
 
 </main>
 
-<footer class="footer">
-  <div class="footer-brand">FAHD KHALED SALON</div>
+<footer>
+  <div class="logo footer-logo">
+    <span>FK</span>
+    <div>
+      <h2>FAHD KHALED</h2>
+      <small>SALON</small>
+    </div>
+  </div>
+
   <p>STYLE · CARE · CONFIDENCE</p>
-  <p>جميع الحقوق محفوظة © <span id="currentYear"></span></p>
-  <button type="button" id="adminAccess" class="admin-access">دخول الإدارة</button>
+  <p>جميع الحقوق محفوظة © <span id="currentYear">2026</span></p>
+
+  <button id="adminAccess" type="button" class="admin-access">
+    دخول الإدارة
+  </button>
 </footer>
 
-<section id="adminPanel" class="admin-panel" hidden>
-  <div class="admin-container">
+<div id="adminPanel" class="admin-panel" hidden>
 
-    <div class="admin-heading">
-      <div>
-        <span>FAHD KHALED SALON</span>
-        <h2>لوحة الإدارة</h2>
-      </div>
-      <button type="button" id="closeAdmin" class="close-button">✕</button>
-    </div>
+  <div class="admin-box">
 
-    <form id="adminLoginForm" class="admin-login">
-      <h3>تسجيل دخول الإدارة</h3>
+    <button id="closeAdmin" type="button">✕</button>
+
+    <h2>لوحة الإدارة</h2>
+
+    <form id="adminLoginForm">
 
       <label for="adminEmail">البريد الإلكتروني</label>
-      <input id="adminEmail" type="email" autocomplete="username" required>
+      <input id="adminEmail" type="email" required>
 
       <label for="adminPassword">كلمة المرور</label>
-      <input id="adminPassword" type="password" autocomplete="current-password" required>
+      <input id="adminPassword" type="password" required>
 
-      <button type="submit" id="adminLoginButton" class="button button-gold full-button">تسجيل الدخول</button>
-      <div id="adminLoginMessage" class="message" role="status"></div>
+      <button id="adminLoginButton" type="submit" class="main-btn">
+        تسجيل الدخول
+      </button>
+
     </form>
 
-    <div id="adminDashboard" hidden>
-      <div class="admin-toolbar">
-        <h3>إدارة الحجوزات</h3>
-        <button type="button" id="adminLogout" class="button button-outline">تسجيل الخروج</button>
-      </div>
+    <div id="adminLoginMessage"></div>
 
-      <div id="adminStatus" class="message"></div>
-      <div id="bookingsList" class="bookings-list"></div>
+    <div id="adminDashboard" hidden>
+      <h3>إدارة الحجوزات</h3>
+      <p id="adminStatus"></p>
+      <button id="adminLogout" type="button">تسجيل الخروج</button>
+      <div id="bookingsList"></div>
     </div>
 
   </div>
-</section>
+</div>
 
-<div id="siteError" class="site-error" hidden></div>
+<div id="siteError"></div>
 
-<script type="module" src="app.js?v=21"></script>
+<script type="module" src="app.js?v=1"></script>
+
 </body>
 </html>
