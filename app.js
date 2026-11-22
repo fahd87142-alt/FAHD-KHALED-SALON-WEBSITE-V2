@@ -1,6 +1,6 @@
 // ========================================
 // FAHD KHALED SALON
-// BOOKING + ADMIN SYSTEM
+// BOOKING + ADMIN + VIP + DELETE SYSTEM
 // ========================================
 
 import { initializeApp } from
@@ -10,6 +10,7 @@ import {
   getFirestore,
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -17,6 +18,7 @@ import {
   limit,
   runTransaction,
   updateDoc,
+  writeBatch,
   serverTimestamp
 } from
 "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
@@ -78,15 +80,12 @@ function addDays(dateString, amount) {
 }
 
 function makeSlotId(barber, date, time) {
-  return encodeURIComponent(
-    `${barber}|${date}|${time}`
-  );
+  return encodeURIComponent(`${barber}|${date}|${time}`);
 }
 
 function getAppointmentSlots(barber, date, time) {
   const [hour, minute] = time.split(":").map(Number);
   const start = hour * 60 + minute;
-
   const slots = [];
 
   for (let i = 0; i < 3; i++) {
@@ -119,6 +118,10 @@ function formatTime(time) {
   const h = hour % 12 || 12;
 
   return `${h}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
+function validPhone(phone) {
+  return /^01[0125][0-9]{8}$/.test(phone);
 }
 
 // ========================================
@@ -171,10 +174,7 @@ function calculateTotal() {
         : "";
   }
 
-  return {
-    total,
-    names
-  };
+  return { total, names };
 }
 
 document.querySelectorAll(
@@ -210,7 +210,6 @@ async function loadAvailableTimes() {
     select.innerHTML = "";
     select.add(new Option("اختار الحلاق والتاريخ أولاً", ""));
     select.disabled = true;
-
     showMessage("availabilityMessage", "");
     return;
   }
@@ -244,12 +243,10 @@ async function loadAvailableTimes() {
     );
 
     const snapshot = await getDocs(slotsQuery);
-
     const busy = new Set();
 
     snapshot.forEach(item => {
       const data = item.data();
-
       busy.add(`${data.date}|${data.time}`);
     });
 
@@ -262,9 +259,7 @@ async function loadAvailableTimes() {
 
     let count = 0;
 
-    // مواعيد من 11 صباحاً حتى 12:15 بعد منتصف الليل
     for (let start = 660; start <= 1455; start += 15) {
-
       const hour = Math.floor((start % 1440) / 60);
       const minute = start % 60;
 
@@ -272,9 +267,11 @@ async function loadAvailableTimes() {
         String(hour).padStart(2, "0") + ":" +
         String(minute).padStart(2, "0");
 
-      // منع المواعيد التي انتهى وقت بدايتها اليوم
-      if (date === today && start < 1440 &&
-          start <= currentMinutes) {
+      if (
+        date === today &&
+        start < 1440 &&
+        start <= currentMinutes
+      ) {
         continue;
       }
 
@@ -294,14 +291,12 @@ async function loadAvailableTimes() {
     if (count === 0) {
       select.add(new Option("لا توجد مواعيد متاحة", ""));
       select.disabled = true;
-
       showMessage(
         "availabilityMessage",
         "لا توجد مواعيد متاحة في هذا اليوم."
       );
     } else {
       select.disabled = false;
-
       showMessage(
         "availabilityMessage",
         `متاح ${count} موعد. اختار الموعد المناسب.`
@@ -326,15 +321,8 @@ async function loadAvailableTimes() {
   }
 }
 
-$("barberSelect")?.addEventListener(
-  "change",
-  loadAvailableTimes
-);
-
-$("bookingDate")?.addEventListener(
-  "change",
-  loadAvailableTimes
-);
+$("barberSelect")?.addEventListener("change", loadAvailableTimes);
+$("bookingDate")?.addEventListener("change", loadAvailableTimes);
 
 // ========================================
 // BOOKING
@@ -361,7 +349,7 @@ $("bookingForm")?.addEventListener("submit", async event => {
     return;
   }
 
-  if (!/^01[0125][0-9]{8}$/.test(phone)) {
+  if (!validPhone(phone)) {
     showMessage("formMessage", "اكتب رقم موبايل مصري صحيح.");
     return;
   }
@@ -391,7 +379,6 @@ $("bookingForm")?.addEventListener("submit", async event => {
 
   try {
     const bookingRef = doc(collection(db, "bookings"));
-
     const slots = getAppointmentSlots(barber, date, time);
 
     await runTransaction(db, async transaction => {
@@ -439,14 +426,9 @@ $("bookingForm")?.addEventListener("submit", async event => {
     $("confirmationDetails").textContent =
       `الاسم: ${name} | الحلاق: ${barber} | التاريخ: ${date} | الموعد: ${formatTime(time)} | الإجمالي: ${services.total} جنيه`;
 
-    showMessage(
-      "formMessage",
-      "تم الحجز بنجاح.",
-      "#75e49a"
-    );
+    showMessage("formMessage", "تم الحجز بنجاح.", "#75e49a");
 
     $("bookingForm").reset();
-
     calculateTotal();
 
     await loadAvailableTimes();
@@ -499,7 +481,6 @@ $("adminLoginForm")?.addEventListener("submit", async event => {
 
   const email = $("adminEmail").value.trim();
   const password = $("adminPassword").value;
-
   const button = $("adminLoginButton");
 
   button.disabled = true;
@@ -540,19 +521,14 @@ $("adminLoginForm")?.addEventListener("submit", async event => {
 
 onAuthStateChanged(auth, async user => {
   if (user && user.uid === ADMIN_UID) {
-
     $("adminLoginForm").hidden = true;
     $("adminDashboard").hidden = false;
 
-    showMessage(
-      "adminStatus",
-      "تم تسجيل الدخول بنجاح."
-    );
+    showMessage("adminStatus", "تم تسجيل الدخول بنجاح.");
 
     await loadAdminBookings();
 
   } else {
-
     $("adminLoginForm").hidden = false;
     $("adminDashboard").hidden = true;
 
@@ -561,6 +537,87 @@ onAuthStateChanged(auth, async user => {
     }
   }
 });
+
+// ========================================
+// COMPLETE BOOKING + COUNT VISIT
+// ========================================
+
+async function changeBookingStatus(bookingId, newStatus) {
+  const bookingRef = doc(db, "bookings", bookingId);
+
+  if (newStatus !== "completed") {
+    await updateDoc(bookingRef, {
+      status: newStatus
+    });
+    return;
+  }
+
+  await runTransaction(db, async transaction => {
+    const bookingSnapshot = await transaction.get(bookingRef);
+
+    if (!bookingSnapshot.exists()) {
+      throw new Error("الحجز غير موجود.");
+    }
+
+    const booking = bookingSnapshot.data();
+
+    if (booking.completedCounted === true) {
+      transaction.update(bookingRef, {
+        status: "completed"
+      });
+      return;
+    }
+
+    const phone = booking.phone;
+    const customerRef = doc(db, "customers", phone);
+
+    const customerSnapshot = await transaction.get(customerRef);
+
+    const oldVisits = customerSnapshot.exists()
+      ? Number(customerSnapshot.data().visits || 0)
+      : 0;
+
+    transaction.update(bookingRef, {
+      status: "completed",
+      completedCounted: true
+    });
+
+    transaction.set(customerRef, {
+      phone: phone,
+      name: booking.name,
+      visits: oldVisits + 1,
+      updatedAt: serverTimestamp()
+    });
+  });
+}
+
+// ========================================
+// DELETE BOOKING + RELEASE SLOTS
+// ========================================
+
+async function deleteBooking(bookingId, slotIds = []) {
+  if (auth.currentUser?.uid !== ADMIN_UID) {
+    throw new Error("غير مسموح.");
+  }
+
+  const confirmed = confirm(
+    "هل أنت متأكد من حذف هذا الحجز نهائياً؟"
+  );
+
+  if (!confirmed) return false;
+
+  const batch = writeBatch(db);
+
+  batch.delete(doc(db, "bookings", bookingId));
+
+  slotIds.forEach(slotId => {
+    batch.delete(doc(db, "barberSlots", slotId));
+  });
+
+  await batch.commit();
+
+  return true;
+}
 
 // ========================================
 // ADMIN BOOKINGS
@@ -588,6 +645,31 @@ async function loadAdminBookings() {
       return;
     }
 
+    const phones = [
+      ...new Set(
+        snapshot.docs
+          .map(item => item.data().phone)
+          .filter(Boolean)
+      )
+    ];
+
+    const customerMap = new Map();
+
+    await Promise.all(
+      phones.map(async phone => {
+        const customerSnapshot = await getDoc(
+          doc(db, "customers", phone)
+        );
+
+        customerMap.set(
+          phone,
+          customerSnapshot.exists()
+            ? Number(customerSnapshot.data().visits || 0)
+            : 0
+        );
+      })
+    );
+
     snapshot.forEach(bookingDoc => {
       const booking = bookingDoc.data();
 
@@ -596,8 +678,10 @@ async function loadAdminBookings() {
 
       const details = document.createElement("p");
 
+      const visits = customerMap.get(booking.phone) || 0;
+
       details.textContent =
-        `الاسم: ${booking.name} | الهاتف: ${booking.phone} | الحلاق: ${booking.barber} | التاريخ: ${booking.date} | الوقت: ${booking.time} | الخدمات: ${booking.service} | الإجمالي: ${booking.total} جنيه | الحالة: ${booking.status}`;
+        `الاسم: ${booking.name} | الهاتف: ${booking.phone} | الحلاق: ${booking.barber} | التاريخ: ${booking.date} | الوقت: ${booking.time} | الخدمات: ${booking.service} | الإجمالي: ${booking.total} جنيه | الحالة: ${booking.status} | زيارات العميل: ${visits}`;
 
       const status = document.createElement("select");
 
@@ -622,9 +706,9 @@ async function loadAdminBookings() {
 
           save.disabled = true;
 
-          await updateDoc(
-            doc(db, "bookings", bookingDoc.id),
-            { status: status.value }
+          await changeBookingStatus(
+            bookingDoc.id,
+            status.value
           );
 
           showMessage("adminStatus", "تم تحديث الحالة.");
@@ -642,7 +726,43 @@ async function loadAdminBookings() {
         }
       });
 
-      card.append(details, status, save);
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.textContent = "حذف الحجز";
+      deleteButton.style.background = "#a52a2a";
+      deleteButton.style.color = "white";
+      deleteButton.style.margin = "8px";
+
+      deleteButton.addEventListener("click", async () => {
+        try {
+          deleteButton.disabled = true;
+
+          const deleted = await deleteBooking(
+            bookingDoc.id,
+            booking.slotIds || []
+          );
+
+          if (deleted) {
+            showMessage("adminStatus", "تم حذف الحجز وإتاحة الموعد.");
+            await loadAdminBookings();
+          } else {
+            deleteButton.disabled = false;
+          }
+
+        } catch (error) {
+          console.error(error);
+
+          showMessage(
+            "adminStatus",
+            "تعذر حذف الحجز: " + error.message,
+            "#ff7777"
+          );
+
+          deleteButton.disabled = false;
+        }
+      });
+
+      card.append(details, status, save, deleteButton);
       list.appendChild(card);
     });
 
@@ -668,18 +788,71 @@ $("adminLogout")?.addEventListener("click", async () => {
 });
 
 // ========================================
-// VIP
+// CUSTOMER VIP LOOKUP
 // ========================================
 
-$("loyaltyForm")?.addEventListener("submit", event => {
+$("loyaltyForm")?.addEventListener("submit", async event => {
   event.preventDefault();
 
-  showMessage(
-    "loyaltyMessage",
-    "للاستعلام عن نقاط VIP برجاء التواصل مع الصالون."
-  );
+  const phone = $("loyaltyPhone").value.trim();
+  const button = $("loyaltySearchButton");
 
+  if (!validPhone(phone)) {
+    showMessage(
+      "loyaltyMessage",
+      "اكتب رقم موبايل مصري صحيح.",
+      "#ff7777"
+    );
+    $("loyaltyResult").hidden = true;
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "جاري البحث...";
+
+  showMessage("loyaltyMessage", "");
   $("loyaltyResult").hidden = true;
+
+  try {
+    const customerRef = doc(db, "customers", phone);
+    const customerSnapshot = await getDoc(customerRef);
+
+    const visits = customerSnapshot.exists()
+      ? Number(customerSnapshot.data().visits || 0)
+      : 0;
+
+    const rewards = Math.floor(visits / 5);
+    const remaining = 5 - (visits % 5);
+
+    $("loyaltyVisits").textContent = visits;
+    $("loyaltyRewards").textContent = rewards;
+
+    $("loyaltyNextReward").textContent =
+      visits >= 5 && visits % 5 === 0
+        ? "مبروك! عندك خصم 50% مستحق على تنظيف البشرة."
+        : `متبقي ${remaining} زيارة للحصول على المكافأة القادمة.`;
+
+    $("loyaltyResult").hidden = false;
+
+    showMessage(
+      "loyaltyMessage",
+      "تم الاستعلام بنجاح.",
+      "#75e49a"
+    );
+
+  } catch (error) {
+    console.error(error);
+
+    showMessage(
+      "loyaltyMessage",
+      "تعذر الاستعلام: " + error.message,
+      "#ff7777"
+    );
+
+  } finally {
+    button.disabled = false;
+    button.textContent = "استعلام";
+  }
 });
 
 // ========================================
