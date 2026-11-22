@@ -1,33 +1,75 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Public visitors may submit booking requests only.
-    // They cannot read, edit, or delete bookings or other salon data.
+
+    function isAdmin() {
+      return request.auth != null &&
+        request.auth.uid ==
+        "n11bT3BtMaXwCWv2iYjW1sQ61Hv2";
+    }
+
+    // الحجوزات
     match /bookings/{bookingId} {
+
       allow create: if
         request.resource.data.keys().hasOnly([
-          'name', 'phone', 'service', 'date', 'time', 'notes', 'status', 'createdAt'
+          'name',
+          'phone',
+          'barber',
+          'service',
+          'services',
+          'total',
+          'date',
+          'time',
+          'notes',
+          'status',
+          'slotIds',
+          'createdAt'
         ]) &&
         request.resource.data.name is string &&
-        request.resource.data.name.size() >= 2 &&
-        request.resource.data.name.size() <= 70 &&
         request.resource.data.phone is string &&
-        request.resource.data.phone.size() >= 7 &&
-        request.resource.data.phone.size() <= 20 &&
+        request.resource.data.barber is string &&
         request.resource.data.service is string &&
-        request.resource.data.service.size() <= 100 &&
+        request.resource.data.services is list &&
+        request.resource.data.total is number &&
         request.resource.data.date is string &&
         request.resource.data.time is string &&
         request.resource.data.notes is string &&
-        request.resource.data.notes.size() <= 500 &&
-        request.resource.data.status == 'new' &&
+        request.resource.data.status == 'confirmed' &&
+        request.resource.data.slotIds is list &&
+        request.resource.data.slotIds.size() == 3 &&
         request.resource.data.createdAt == request.time;
-      allow read, update, delete: if false;
+
+      allow read, update, delete: if isAdmin();
     }
 
-    // All other collections remain private until admin access is configured.
+    // مواعيد الحلاقين
+    match /barberSlots/{slotId} {
+
+      allow read: if true;
+
+      allow create: if
+        request.resource.data.keys().hasOnly([
+          'bookingId',
+          'barber',
+          'date',
+          'time'
+        ]) &&
+        request.resource.data.bookingId is string &&
+        request.resource.data.barber is string &&
+        request.resource.data.date is string &&
+        request.resource.data.time is string &&
+        getAfter(
+          /databases/$(database)/documents/bookings/$(request.resource.data.bookingId)
+        ).data.slotIds.hasAny([slotId]);
+
+      allow update, delete: if isAdmin();
+    }
+
+    // باقي البيانات
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isAdmin();
     }
   }
 }
