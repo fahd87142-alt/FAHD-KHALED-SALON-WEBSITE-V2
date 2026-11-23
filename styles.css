@@ -366,18 +366,20 @@ footer p {
   position: fixed;
   inset: 0;
   z-index: 999;
-  background: rgba(0,0,0,.9);
-  padding: 20px;
+  background: rgba(0,0,0,.95);
+  padding: 15px;
   overflow-y: auto;
 }
 
 .admin-box {
-  max-width: 700px;
-  margin: 30px auto;
-  background: #202020;
-  border: 1px solid var(--gold);
-  padding: 25px;
-  border-radius: 10px;
+  max-width: 1100px;
+  width: 100%;
+  margin: 15px auto;
+  background: #171717;
+  border: 1px solid #5a4828;
+  padding: 22px;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.5);
 }
 
 .admin-box h2 {
@@ -412,12 +414,202 @@ footer p {
   margin: 15px 0;
 }
 
-#bookingsList {
-  display: grid;
-  gap: 12px;
-  margin-top: 15px;
+/* عنوان لوحة الإدارة */
+.admin-heading {
+  color: var(--gold);
+  text-align: center;
+  font-size: 23px;
+  margin: 10px 0 20px;
 }
 
+/* شريط الأدوات */
+.admin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 18px 0;
+  padding: 15px;
+  background: #202020;
+  border: 1px solid #393939;
+  border-radius: 9px;
+}
+
+.admin-download,
+.admin-clear,
+.admin-logout {
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  padding: 9px 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: .2s;
+}
+
+.admin-download {
+  background: var(--gold);
+  color: #111;
+}
+
+.admin-download:hover {
+  background: #e4c47e;
+}
+
+.admin-clear {
+  background: #241414;
+  color: #ff7777;
+  border-color: #8b3838;
+}
+
+.admin-clear:hover {
+  background: #512020;
+}
+
+.admin-logout {
+  background: transparent;
+  color: var(--gold);
+}
+
+.admin-bookings-count {
+  color: var(--gold);
+  font-weight: 800;
+  font-size: 15px;
+  padding: 5px 10px;
+}
+
+/* قائمة الحجوزات */
+#bookingsList {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 18px;
+}
+
+/* مجموعة كل يوم */
+.booking-day-section {
+  background: #1b1b1b;
+  border: 1px solid #45402f;
+  border-radius: 10px;
+  padding: 15px;
+  overflow: hidden;
+}
+
+.booking-day-title {
+  color: var(--gold);
+  font-size: 18px;
+  font-weight: 800;
+  padding: 5px 10px 13px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #51452e;
+  text-align: right;
+}
+
+/* الجدول */
+.booking-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 7px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) #222;
+}
+
+.admin-bookings-table {
+  width: 100%;
+  min-width: 850px;
+  border-collapse: collapse;
+  text-align: center;
+  direction: rtl;
+  background: #111;
+}
+
+.admin-bookings-table th {
+  background: #292316;
+  color: var(--gold);
+  font-weight: 800;
+  padding: 13px 10px;
+  border: 1px solid #51452e;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.admin-bookings-table td {
+  padding: 12px 9px;
+  border: 1px solid #333;
+  color: #eee;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.admin-bookings-table tbody tr {
+  transition: background .2s;
+}
+
+.admin-bookings-table tbody tr:hover {
+  background: #252525;
+}
+
+.admin-bookings-table td:first-child {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.booking-extra-row td {
+  background: #191919;
+}
+
+/* أزرار الحضور والغياب */
+.attendance-cell {
+  min-width: 105px;
+}
+
+.attendance-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+}
+
+.attendance-buttons button {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  border: 1px solid #555;
+  background: #222;
+  color: #ddd;
+  font-size: 19px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: .2s;
+}
+
+.attendance-present {
+  color: #888 !important;
+  border-color: #376b49 !important;
+}
+
+.attendance-present:hover,
+.attendance-present.active {
+  background: #176b36 !important;
+  color: #fff !important;
+  border-color: #39b765 !important;
+  box-shadow: 0 0 10px rgba(57,183,101,.25);
+}
+
+.attendance-absent {
+  color: #888 !important;
+  border-color: #713838 !important;
+}
+
+.attendance-absent:hover,
+.attendance-absent.active {
+  background: #8d2525 !important;
+  color: #fff !important;
+  border-color: #e34b4b !important;
+  box-shadow: 0 0 10px rgba(227,75,75,.25);
+}
+
+/* كارت احتياطي */
 .booking-card {
   background: #111;
   border: 1px solid #444;
@@ -436,6 +628,7 @@ footer p {
   display: none !important;
 }
 
+/* الموبايل */
 @media (max-width: 750px) {
   .header {
     padding: 12px 5%;
@@ -487,6 +680,45 @@ footer p {
 
   .section > h2 {
     font-size: 28px;
+  }
+
+  .admin-panel {
+    padding: 7px;
+  }
+
+  .admin-box {
+    padding: 13px 9px;
+    margin: 5px auto;
+  }
+
+  .admin-toolbar {
+    justify-content: center;
+    gap: 9px;
+    padding: 11px 7px;
+  }
+
+  .admin-download,
+  .admin-clear,
+  .admin-logout {
+    padding: 8px 11px;
+    font-size: 12px;
+  }
+
+  .admin-bookings-count {
+    width: 100%;
+    text-align: center;
+  }
+
+  .booking-day-section {
+    padding: 9px;
+  }
+
+  .booking-day-title {
+    font-size: 15px;
+  }
+
+  .admin-bookings-table {
+    min-width: 850px;
   }
 }
 
