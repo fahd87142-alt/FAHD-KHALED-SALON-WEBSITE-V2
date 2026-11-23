@@ -1,6 +1,6 @@
 // ========================================
 // FAHD KHALED SALON
-// BOOKING + ADMIN + VIP + DELETE SYSTEM
+// BOOKING + ADMIN + VIP + ATTENDANCE
 // ========================================
 
 import { initializeApp } from
@@ -14,8 +14,6 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
-  limit,
   runTransaction,
   updateDoc,
   writeBatch,
@@ -113,11 +111,33 @@ function getAppointmentSlots(barber, date, time) {
 }
 
 function formatTime(time) {
+  if (!time) return "-";
+
   const [hour, minute] = time.split(":").map(Number);
   const suffix = hour >= 12 ? "مساءً" : "صباحاً";
   const h = hour % 12 || 12;
 
   return `${h}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
+function formatDate(dateString) {
+  if (!dateString) return "-";
+
+  const parts = dateString.split("-");
+
+  if (parts.length !== 3) return dateString;
+
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+function getArabicDay(dateString) {
+  if (!dateString) return "-";
+
+  const date = new Date(dateString + "T12:00:00");
+
+  return new Intl.DateTimeFormat("ar-EG", {
+    weekday: "long"
+  }).format(date);
 }
 
 function validPhone(phone) {
@@ -291,12 +311,14 @@ async function loadAvailableTimes() {
     if (count === 0) {
       select.add(new Option("لا توجد مواعيد متاحة", ""));
       select.disabled = true;
+
       showMessage(
         "availabilityMessage",
         "لا توجد مواعيد متاحة في هذا اليوم."
       );
     } else {
       select.disabled = false;
+
       showMessage(
         "availabilityMessage",
         `متاح ${count} موعد. اختار الموعد المناسب.`
@@ -539,16 +561,29 @@ onAuthStateChanged(auth, async user => {
 });
 
 // ========================================
-// COMPLETE BOOKING + COUNT VISIT
+// COMPLETE BOOKING + VIP
 // ========================================
 
 async function changeBookingStatus(bookingId, newStatus) {
+  if (auth.currentUser?.uid !== ADMIN_UID) {
+    throw new Error("غير مسموح.");
+  }
+
   const bookingRef = doc(db, "bookings", bookingId);
+
+  if (newStatus === "no_show") {
+    await updateDoc(bookingRef, {
+      status: "no_show"
+    });
+
+    return;
+  }
 
   if (newStatus !== "completed") {
     await updateDoc(bookingRef, {
       status: newStatus
     });
+
     return;
   }
 
@@ -565,12 +600,13 @@ async function changeBookingStatus(bookingId, newStatus) {
       transaction.update(bookingRef, {
         status: "completed"
       });
+
       return;
     }
 
     const phone = booking.phone;
-    const customerRef = doc(db, "customers", phone);
 
+    const customerRef = doc(db, "customers", phone);
     const customerSnapshot = await transaction.get(customerRef);
 
     const oldVisits = customerSnapshot.exists()
@@ -583,7 +619,7 @@ async function changeBookingStatus(bookingId, newStatus) {
     });
 
     transaction.set(customerRef, {
-      phone: phone,
+      phone,
       name: booking.name,
       visits: oldVisits + 1,
       updatedAt: serverTimestamp()
@@ -592,7 +628,7 @@ async function changeBookingStatus(bookingId, newStatus) {
 }
 
 // ========================================
-// DELETE BOOKING + RELEASE SLOTS
+// DELETE ONE BOOKING
 // ========================================
 
 async function deleteBooking(bookingId, slotIds = []) {
@@ -620,35 +656,243 @@ async function deleteBooking(bookingId, slotIds = []) {
 }
 
 // ========================================
-// ADMIN BOOKINGS
+// DELETE ALL BOOKINGS
+// ========================================
+
+async function deleteAllBookings() {
+  if (auth.currentUser?.uid !== ADMIN_UID) {
+    throw new Error("غير مسموح.");
+  }
+
+  const confirmed = confirm(
+    "تحذير: هل أنت متأكد من مسح كل الحجوزات نهائياً؟"
+  );
+
+  if (!confirmed) return;
+
+  const button = $("clearAllBookings");
+
+  button.disabled = true;
+  button.textContent = "جاري المسح...";
+
+  try {
+    const snapshot = await getDocs(
+      collection(db, "bookings")
+    );
+
+    const bookings = snapshot.docs;
+
+    for (let i = 0; i < bookings.length; i += 100) {
+      const group = bookings.slice(i, i + 100);
+      const batch = writeBatch(db);
+
+      group.forEach(bookingDoc => {
+        const booking = bookingDoc.data();
+
+        batch.delete(
+          doc(db, "bookings", bookingDoc.id)
+        );
+
+        (booking.slotIds || []).forEach(slotId => {
+          batch.delete(
+            doc(db, "barberSlots", slotId)
+          );
+        });
+      });
+
+      await batch.commit();
+    }
+
+    showMessage(
+      "adminStatus",
+      "تم مسح جميع الحجوزات وتحرير المواعيد.",
+      "#75e49a"
+    );
+
+    await loadAdminBookings();
+
+  } catch (error) {
+    console.error(error);
+
+    showMessage(
+      "adminStatus",
+      "تعذر مسح الحجوزات: " + error.message,
+      "#ff7777"
+    );
+
+  } finally {
+    button.disabled = false;
+    button.textContent = "مسح كل الحجوزات";
+  }
+}
+
+$("clearAllBookings")?.addEventListener(
+  "click",
+  deleteAllBookings
+);
+
+// ========================================
+// DOWNLOAD BOOKINGS CSV
+// ========================================
+
+function escapeCSV(value) {
+  const text = String(value ?? "");
+
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+
+async function downloadBookings() {
+  if (auth.currentUser?.uid !== ADMIN_UID) {
+    showMessage("adminStatus", "غير مسموح.", "#ff7777");
+    return;
+  }
+
+  const button = $("downloadBookings");
+
+  button.disabled = true;
+  button.textContent = "جاري تجهيز الملف...";
+
+  try {
+    const snapshot = await getDocs(
+      collection(db, "bookings")
+    );
+
+    const rows = [
+      [
+        "الاسم",
+        "رقم الموبايل",
+        "الحلاق",
+        "اليوم",
+        "التاريخ",
+        "الوقت",
+        "الخدمة",
+        "إجمالي السعر",
+        "الحالة"
+      ]
+    ];
+
+    snapshot.docs.forEach(item => {
+      const booking = item.data();
+
+      let status = "مؤكد";
+
+      if (booking.status === "completed") {
+        status = "حضر";
+      } else if (booking.status === "no_show") {
+        status = "لم يحضر";
+      } else if (booking.status === "rejected") {
+        status = "مرفوض";
+      }
+
+      rows.push([
+        booking.name || "",
+        booking.phone || "",
+        booking.barber || "",
+        getArabicDay(booking.date),
+        formatDate(booking.date),
+        formatTime(booking.time),
+        booking.service || "",
+        booking.total || 0,
+        status
+      ]);
+    });
+
+    const csv = "\uFEFF" + rows
+      .map(row => row.map(escapeCSV).join(","))
+      .join("\r\n");
+
+    const blob = new Blob(
+      [csv],
+      { type: "text/csv;charset=utf-8;" }
+    );
+
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download =
+      "FAHD-KHALED-BOOKINGS-" + localDate(new Date()) + ".csv";
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    URL.revokeObjectURL(url);
+
+    showMessage(
+      "adminStatus",
+      "تم تنزيل ملف الحجوزات بنجاح.",
+      "#75e49a"
+    );
+
+  } catch (error) {
+    console.error(error);
+
+    showMessage(
+      "adminStatus",
+      "تعذر تنزيل الملف: " + error.message,
+      "#ff7777"
+    );
+
+  } finally {
+    button.disabled = false;
+    button.textContent = "⬇ تنزيل الحجوزات";
+  }
+}
+
+$("downloadBookings")?.addEventListener(
+  "click",
+  downloadBookings
+);
+
+// ========================================
+// ADMIN BOOKINGS TABLE
 // ========================================
 
 async function loadAdminBookings() {
   if (auth.currentUser?.uid !== ADMIN_UID) return;
 
   const list = $("bookingsList");
+
   list.textContent = "جاري تحميل الحجوزات...";
 
   try {
-    const q = query(
-      collection(db, "bookings"),
-      orderBy("createdAt", "desc"),
-      limit(100)
+    const snapshot = await getDocs(
+      collection(db, "bookings")
     );
 
-    const snapshot = await getDocs(q);
+    const bookings = snapshot.docs.map(item => ({
+      id: item.id,
+      ...item.data()
+    }));
+
+    bookings.sort((a, b) => {
+      const dateCompare =
+        String(b.date || "").localeCompare(String(a.date || ""));
+
+      if (dateCompare !== 0) return dateCompare;
+
+      return String(a.time || "").localeCompare(String(b.time || ""));
+    });
+
+    const countElement = $("totalBookingsCount");
+
+    if (countElement) {
+      countElement.textContent = bookings.length;
+    }
 
     list.innerHTML = "";
 
-    if (snapshot.empty) {
-      list.textContent = "لا توجد حجوزات.";
+    if (!bookings.length) {
+      list.textContent = "لا توجد حجوزات حالياً.";
       return;
     }
 
     const phones = [
       ...new Set(
-        snapshot.docs
-          .map(item => item.data().phone)
+        bookings
+          .map(item => item.phone)
           .filter(Boolean)
       )
     ];
@@ -670,100 +914,165 @@ async function loadAdminBookings() {
       })
     );
 
-    snapshot.forEach(bookingDoc => {
-      const booking = bookingDoc.data();
+    // تقسيم الحجوزات حسب التاريخ
 
-      const card = document.createElement("div");
-      card.className = "booking-card";
+    const grouped = new Map();
 
-      const details = document.createElement("p");
+    bookings.forEach(booking => {
+      const date = booking.date || "بدون تاريخ";
 
-      const visits = customerMap.get(booking.phone) || 0;
+      if (!grouped.has(date)) {
+        grouped.set(date, []);
+      }
 
-      details.textContent =
-        `الاسم: ${booking.name} | الهاتف: ${booking.phone} | الحلاق: ${booking.barber} | التاريخ: ${booking.date} | الوقت: ${booking.time} | الخدمات: ${booking.service} | الإجمالي: ${booking.total} جنيه | الحالة: ${booking.status} | زيارات العميل: ${visits}`;
+      grouped.get(date).push(booking);
+    });
 
-      const status = document.createElement("select");
+    grouped.forEach((dayBookings, date) => {
+
+      const daySection = document.createElement("section");
+      daySection.className = "booking-day-section";
+
+      const dayTitle = document.createElement("h3");
+      dayTitle.className = "booking-day-title";
+
+      if (date === "بدون تاريخ") {
+        dayTitle.textContent = "حجوزات بدون تاريخ";
+      } else {
+        dayTitle.textContent =
+          getArabicDay(date) + " - " + formatDate(date);
+      }
+
+      daySection.appendChild(dayTitle);
+
+      const tableWrapper = document.createElement("div");
+      tableWrapper.className = "booking-table-wrapper";
+
+      const table = document.createElement("table");
+      table.className = "admin-bookings-table";
+
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
 
       [
-        ["new", "جديد"],
-        ["confirmed", "مؤكد"],
-        ["completed", "مكتمل"],
-        ["rejected", "مرفوض"]
-      ].forEach(([value, label]) => {
-        status.add(new Option(label, value));
+        "الاسم",
+        "الرقم",
+        "اليوم",
+        "التاريخ",
+        "الوقت",
+        "الخدمة",
+        "إجمالي السعر",
+        "الحضور / الغياب"
+      ].forEach(title => {
+        const th = document.createElement("th");
+        th.textContent = title;
+        headerRow.appendChild(th);
       });
 
-      status.value = booking.status || "confirmed";
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
 
-      const save = document.createElement("button");
-      save.type = "button";
-      save.textContent = "حفظ الحالة";
+      const tbody = document.createElement("tbody");
 
-      save.addEventListener("click", async () => {
-        try {
-          if (auth.currentUser?.uid !== ADMIN_UID) return;
+      dayBookings.forEach(booking => {
 
-          save.disabled = true;
+        const row = document.createElement("tr");
 
-          await changeBookingStatus(
-            bookingDoc.id,
-            status.value
-          );
+        const values = [
+          booking.name || "-",
+          booking.phone || "-",
+          getArabicDay(booking.date),
+          formatDate(booking.date),
+          formatTime(booking.time),
+          booking.service || "-",
+          `${Number(booking.total || 0)} جنيه`
+        ];
 
-          showMessage("adminStatus", "تم تحديث الحالة.");
+        values.forEach(value => {
+          const td = document.createElement("td");
+          td.textContent = value;
+          row.appendChild(td);
+        });
 
-          await loadAdminBookings();
+        // خانة الحضور والغياب
 
-        } catch (error) {
-          showMessage(
-            "adminStatus",
-            "خطأ: " + error.message,
-            "#ff7777"
-          );
+        const attendanceCell = document.createElement("td");
+        attendanceCell.className = "attendance-cell";
 
-          save.disabled = false;
+        const attendanceButtons = document.createElement("div");
+        attendanceButtons.className = "attendance-buttons";
+
+        const presentButton = document.createElement("button");
+        presentButton.type = "button";
+        presentButton.textContent = "✓";
+        presentButton.className = "attendance-present";
+        presentButton.title = "حضر";
+
+        const absentButton = document.createElement("button");
+        absentButton.type = "button";
+        absentButton.textContent = "✕";
+        absentButton.className = "attendance-absent";
+        absentButton.title = "لم يحضر";
+
+        if (booking.status === "completed") {
+          presentButton.classList.add("active");
         }
-      });
 
-      const deleteButton = document.createElement("button");
-      deleteButton.type = "button";
-      deleteButton.textContent = "حذف الحجز";
-      deleteButton.style.background = "#a52a2a";
-      deleteButton.style.color = "white";
-      deleteButton.style.margin = "8px";
-
-      deleteButton.addEventListener("click", async () => {
-        try {
-          deleteButton.disabled = true;
-
-          const deleted = await deleteBooking(
-            bookingDoc.id,
-            booking.slotIds || []
-          );
-
-          if (deleted) {
-            showMessage("adminStatus", "تم حذف الحجز وإتاحة الموعد.");
-            await loadAdminBookings();
-          } else {
-            deleteButton.disabled = false;
-          }
-
-        } catch (error) {
-          console.error(error);
-
-          showMessage(
-            "adminStatus",
-            "تعذر حذف الحجز: " + error.message,
-            "#ff7777"
-          );
-
-          deleteButton.disabled = false;
+        if (booking.status === "no_show") {
+          absentButton.classList.add("active");
         }
+
+        presentButton.addEventListener("click", async () => {
+          await updateAttendance(
+            booking.id,
+            "completed",
+            presentButton,
+            absentButton
+          );
+        });
+
+        absentButton.addEventListener("click", async () => {
+          await updateAttendance(
+            booking.id,
+            "no_show",
+            presentButton,
+            absentButton
+          );
+        });
+
+        attendanceButtons.append(
+          presentButton,
+          absentButton
+        );
+
+        attendanceCell.appendChild(attendanceButtons);
+        row.appendChild(attendanceCell);
+
+        tbody.appendChild(row);
+
+        // سطر معلومات إضافية للحلاق والزيارات
+
+        const extraRow = document.createElement("tr");
+        extraRow.className = "booking-extra-row";
+
+        const extraCell = document.createElement("td");
+        extraCell.colSpan = 8;
+
+        const visits = customerMap.get(booking.phone) || 0;
+
+        extraCell.textContent =
+          `الحلاق: ${booking.barber || "-"} | زيارات العميل: ${visits}`;
+
+        extraRow.appendChild(extraCell);
+        tbody.appendChild(extraRow);
+
       });
 
-      card.append(details, status, save, deleteButton);
-      list.appendChild(card);
+      table.appendChild(tbody);
+      tableWrapper.appendChild(table);
+      daySection.appendChild(tableWrapper);
+
+      list.appendChild(daySection);
     });
 
   } catch (error) {
@@ -771,6 +1080,57 @@ async function loadAdminBookings() {
 
     list.textContent =
       "خطأ في تحميل الحجوزات: " + error.message;
+  }
+}
+
+// ========================================
+// UPDATE ATTENDANCE
+// ========================================
+
+async function updateAttendance(
+  bookingId,
+  newStatus,
+  presentButton,
+  absentButton
+) {
+  if (auth.currentUser?.uid !== ADMIN_UID) {
+    showMessage("adminStatus", "غير مسموح.", "#ff7777");
+    return;
+  }
+
+  presentButton.disabled = true;
+  absentButton.disabled = true;
+
+  try {
+    await changeBookingStatus(bookingId, newStatus);
+
+    if (newStatus === "completed") {
+      showMessage(
+        "adminStatus",
+        "تم تسجيل حضور العميل واحتساب الزيارة.",
+        "#75e49a"
+      );
+    } else {
+      showMessage(
+        "adminStatus",
+        "تم تسجيل غياب العميل.",
+        "#ff7777"
+      );
+    }
+
+    await loadAdminBookings();
+
+  } catch (error) {
+    console.error(error);
+
+    showMessage(
+      "adminStatus",
+      "تعذر تحديث الحالة: " + error.message,
+      "#ff7777"
+    );
+
+    presentButton.disabled = false;
+    absentButton.disabled = false;
   }
 }
 
@@ -803,6 +1163,7 @@ $("loyaltyForm")?.addEventListener("submit", async event => {
       "اكتب رقم موبايل مصري صحيح.",
       "#ff7777"
     );
+
     $("loyaltyResult").hidden = true;
     return;
   }
