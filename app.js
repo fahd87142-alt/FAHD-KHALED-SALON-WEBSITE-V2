@@ -42,7 +42,7 @@ const firebaseConfig = {
   appId: "1:999874398926:web:60a841f71a579d1b7e5e9f"
 };
 
-const ADMIN_UID = "n11bT3BtMaXwCWv2iYjW1sQ61Hv2";
+const ADMIN_UID = "n11bT3BtMaXwCWv2";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -1377,7 +1377,7 @@ function addLoyaltyStyles() {
 
     .wheel-label {
       position: absolute;
-      width: 105px;
+      width: 88px;
       color: #17120a;
       font-size: 11px;
       font-weight: 900;
@@ -1386,29 +1386,31 @@ function addLoyaltyStyles() {
       z-index: 2;
     }
 
+    /* القطاع الأول: أعلى اليمين */
     .wheel-label.one {
-      top: 40px;
-      left: 50%;
-      transform: translateX(-50%);
+      top: 24%;
+      right: 7%;
+      color: #17120a;
     }
 
+    /* القطاع الثاني: أسفل اليمين */
     .wheel-label.two {
-      right: 8px;
-      top: 50%;
-      transform: translateY(-50%);
+      bottom: 24%;
+      right: 7%;
       color: #f2dfb5;
     }
 
+    /* القطاع الثالث: أسفل اليسار */
     .wheel-label.three {
-      bottom: 38px;
-      left: 50%;
-      transform: translateX(-50%);
+      bottom: 24%;
+      left: 7%;
+      color: #17120a;
     }
 
+    /* القطاع الرابع: أعلى اليسار */
     .wheel-label.four {
-      left: 8px;
-      top: 50%;
-      transform: translateY(-50%);
+      top: 24%;
+      left: 7%;
       color: #f2dfb5;
     }
 
@@ -1481,7 +1483,7 @@ function addLoyaltyStyles() {
 
       .wheel-label {
         font-size: 10px;
-        width: 90px;
+        width: 78px;
       }
 
       .loyalty-dot {
@@ -1498,7 +1500,7 @@ function addLoyaltyStyles() {
 // LOYALTY CARD RENDER
 // ========================================
 
-function renderLoyaltyCard(phone, customer) {
+function renderLoyaltyCard(phone, customer, spinMessage = "") {
   addLoyaltyStyles();
 
   const result = $("loyaltyResult");
@@ -1643,6 +1645,9 @@ function renderLoyaltyCard(phone, customer) {
   spinResult.className = "loyalty-spin-result";
   spinResult.id = "loyaltySpinResult";
 
+  // الاحتفاظ برسالة الفوز بعد إعادة بناء الكارت
+  spinResult.textContent = spinMessage;
+
   spinButton.addEventListener("click", () => {
     spinLoyaltyWheel(phone, spinButton, wheel, spinResult);
   });
@@ -1734,7 +1739,6 @@ async function spinLoyaltyWheel(
 
   resultElement.textContent = "";
 
-  // اختيار الجائزة قبل المعاملة حتى لا تتغير عند إعادة المحاولة
   const rewardIndex = Math.floor(
     Math.random() * LOYALTY_REWARDS.length
   );
@@ -1785,8 +1789,7 @@ async function spinLoyaltyWheel(
       }, { merge: true });
     });
 
-    // تحديد مكان الجائزة الفائزة على العجلة
-    // ترتيب القطاعات يبدأ من أعلى العجلة باتجاه عقارب الساعة
+    // حساب القطاع الفائز بالنسبة للمؤشر الثابت أعلى العجلة
     const sectorCenter = rewardIndex * 90 + 45;
 
     const targetRotation =
@@ -1805,8 +1808,7 @@ async function spinLoyaltyWheel(
 
     await new Promise(resolve => setTimeout(resolve, 5200));
 
-    resultElement.textContent =
-      `مبروك! جائزتك هي: ${reward}`;
+    const winMessage = `مبروك! جائزتك هي: ${reward}`;
 
     showMessage(
       "loyaltyMessage",
@@ -1814,21 +1816,26 @@ async function spinLoyaltyWheel(
       "#75e49a"
     );
 
-    // تحديث الكارت بعد نجاح تسجيل الجائزة
+    // تحديث بيانات الكارت مع الاحتفاظ برسالة الفوز
     try {
       const updatedSnapshot = await getDoc(customerRef);
 
       if (updatedSnapshot.exists()) {
-        renderLoyaltyCard(phone, updatedSnapshot.data());
+        renderLoyaltyCard(
+          phone,
+          updatedSnapshot.data(),
+          winMessage
+        );
+      } else {
+        resultElement.textContent = winMessage;
       }
     } catch (refreshError) {
       console.error("Loyalty refresh error:", refreshError);
+      resultElement.textContent = winMessage;
     }
 
   } catch (error) {
     console.error(error);
-
-    resultElement.textContent = "";
 
     showMessage(
       "loyaltyMessage",
