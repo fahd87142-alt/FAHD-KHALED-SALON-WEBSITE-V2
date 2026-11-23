@@ -1,6 +1,6 @@
 // ========================================
 // FAHD KHALED SALON
-// BOOKING + ADMIN + VIP + ATTENDANCE
+// BOOKING + ADMIN + LOYALTY + WHEEL + ATTENDANCE
 // ========================================
 
 import { initializeApp } from
@@ -142,6 +142,51 @@ function getArabicDay(dateString) {
 
 function validPhone(phone) {
   return /^01[0125][0-9]{8}$/.test(phone);
+}
+
+// ========================================
+// LOYALTY REWARDS
+// ========================================
+
+const LOYALTY_REWARDS = [
+  "قص شعر مجاناً",
+  "قص دقن مجاناً",
+  "جلسة بشرة كاملة مجاناً",
+  "قص شعر + قص دقن + بشرة كاملة مجاناً"
+];
+
+let loyaltyCurrentPhone = "";
+let loyaltySpinning = false;
+
+function getCustomerLoyaltyData(customer) {
+  const visits = Math.max(
+    0,
+    Number(customer?.visits || 0)
+  );
+
+  const spinsUsed = Math.max(
+    0,
+    Number(customer?.spinsUsed || 0)
+  );
+
+  const earnedSpins = Math.floor(visits / 10);
+
+  const availableSpins = Math.max(
+    0,
+    earnedSpins - spinsUsed
+  );
+
+  const progress = availableSpins > 0
+    ? 10
+    : visits % 10;
+
+  return {
+    visits,
+    spinsUsed,
+    earnedSpins,
+    availableSpins,
+    progress
+  };
 }
 
 // ========================================
@@ -561,7 +606,7 @@ onAuthStateChanged(auth, async user => {
 });
 
 // ========================================
-// COMPLETE BOOKING + VIP
+// COMPLETE BOOKING + CUSTOMER VISITS
 // ========================================
 
 async function changeBookingStatus(bookingId, newStatus) {
@@ -609,9 +654,14 @@ async function changeBookingStatus(bookingId, newStatus) {
     const customerRef = doc(db, "customers", phone);
     const customerSnapshot = await transaction.get(customerRef);
 
-    const oldVisits = customerSnapshot.exists()
-      ? Number(customerSnapshot.data().visits || 0)
-      : 0;
+    const oldCustomer = customerSnapshot.exists()
+      ? customerSnapshot.data()
+      : {};
+
+    const oldVisits = Math.max(
+      0,
+      Number(oldCustomer.visits || 0)
+    );
 
     transaction.update(bookingRef, {
       status: "completed",
@@ -620,10 +670,14 @@ async function changeBookingStatus(bookingId, newStatus) {
 
     transaction.set(customerRef, {
       phone,
-      name: booking.name,
+      name: booking.name || oldCustomer.name || "",
       visits: oldVisits + 1,
+      spinsUsed: Number(oldCustomer.spinsUsed || 0),
+      rewardHistory: Array.isArray(oldCustomer.rewardHistory)
+        ? oldCustomer.rewardHistory
+        : [],
       updatedAt: serverTimestamp()
-    });
+    }, { merge: true });
   });
 }
 
@@ -855,6 +909,8 @@ async function loadAdminBookings() {
 
   const list = $("bookingsList");
 
+  if (!list) return;
+
   list.textContent = "جاري تحميل الحجوزات...";
 
   try {
@@ -913,8 +969,6 @@ async function loadAdminBookings() {
         );
       })
     );
-
-    // تقسيم الحجوزات حسب التاريخ
 
     const grouped = new Map();
 
@@ -994,8 +1048,6 @@ async function loadAdminBookings() {
           row.appendChild(td);
         });
 
-        // خانة الحضور والغياب
-
         const attendanceCell = document.createElement("td");
         attendanceCell.className = "attendance-cell";
 
@@ -1050,8 +1102,6 @@ async function loadAdminBookings() {
 
         tbody.appendChild(row);
 
-        // سطر معلومات إضافية للحلاق والزيارات
-
         const extraRow = document.createElement("tr");
         extraRow.className = "booking-extra-row";
 
@@ -1061,11 +1111,10 @@ async function loadAdminBookings() {
         const visits = customerMap.get(booking.phone) || 0;
 
         extraCell.textContent =
-          `الحلاق: ${booking.barber || "-"} | زيارات العميل: ${visits}`;
+          `الحلاق: ${booking.barber || "-"} | إجمالي زيارات العميل: ${visits}`;
 
         extraRow.appendChild(extraCell);
         tbody.appendChild(extraRow);
-
       });
 
       table.appendChild(tbody);
@@ -1148,7 +1197,664 @@ $("adminLogout")?.addEventListener("click", async () => {
 });
 
 // ========================================
-// CUSTOMER VIP LOOKUP
+// LOYALTY CARD DESIGN
+// ========================================
+
+function addLoyaltyStyles() {
+  if ($("loyaltyDynamicStyles")) return;
+
+  const style = document.createElement("style");
+  style.id = "loyaltyDynamicStyles";
+
+  style.textContent = `
+    .loyalty-card-new {
+      background: linear-gradient(145deg, #171717, #080808);
+      border: 1px solid #b9954b;
+      border-radius: 20px;
+      padding: 22px;
+      margin-top: 18px;
+      color: #f7f0df;
+      box-shadow: 0 8px 30px rgba(0,0,0,.35);
+      direction: rtl;
+      text-align: center;
+    }
+
+    .loyalty-card-new * {
+      box-sizing: border-box;
+    }
+
+    .loyalty-brand {
+      color: #d6b66d;
+      font-size: 13px;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+      font-weight: 800;
+    }
+
+    .loyalty-card-title {
+      color: #fff;
+      font-size: 22px;
+      margin: 5px 0 18px;
+      font-weight: 900;
+    }
+
+    .loyalty-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .loyalty-stat {
+      border: 1px solid rgba(201,164,92,.35);
+      border-radius: 12px;
+      padding: 12px 5px;
+      background: rgba(255,255,255,.035);
+    }
+
+    .loyalty-stat strong {
+      display: block;
+      color: #d9b967;
+      font-size: 25px;
+      margin-bottom: 4px;
+    }
+
+    .loyalty-stat span {
+      color: #bbb;
+      font-size: 12px;
+    }
+
+    .loyalty-dots-title {
+      color: #d9b967;
+      font-weight: 800;
+      margin: 12px 0;
+    }
+
+    .loyalty-dots {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      max-width: 280px;
+      margin: 15px auto;
+    }
+
+    .loyalty-dot {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      margin: auto;
+      border: 1px solid #80672f;
+      background: #292929;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #777;
+      font-weight: 900;
+      font-size: 16px;
+    }
+
+    .loyalty-dot.active {
+      background: linear-gradient(145deg, #f4d78a, #ad8235);
+      color: #17120a;
+      border-color: #ffe5a1;
+      box-shadow: 0 0 13px rgba(220,181,91,.35);
+    }
+
+    .loyalty-progress-text {
+      color: #ddd;
+      font-size: 13px;
+      margin: 12px 0;
+    }
+
+    .loyalty-reward-status {
+      border: 1px solid rgba(201,164,92,.4);
+      background: rgba(201,164,92,.08);
+      border-radius: 12px;
+      padding: 13px;
+      margin-top: 15px;
+      color: #e8d3a3;
+      line-height: 1.8;
+      font-size: 14px;
+    }
+
+    .loyalty-wheel-area {
+      margin-top: 22px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(201,164,92,.25);
+    }
+
+    .loyalty-wheel-title {
+      color: #d9b967;
+      font-size: 19px;
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
+
+    .loyalty-wheel-desc {
+      color: #bbb;
+      font-size: 13px;
+      margin-bottom: 15px;
+    }
+
+    .loyalty-wheel-wrap {
+      position: relative;
+      width: 260px;
+      height: 260px;
+      max-width: 100%;
+      margin: 10px auto 18px;
+    }
+
+    .loyalty-wheel {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 7px solid #d0ac60;
+      position: relative;
+      overflow: hidden;
+      background: conic-gradient(
+        #d2ad60 0deg 90deg,
+        #222 90deg 180deg,
+        #d2ad60 180deg 270deg,
+        #222 270deg 360deg
+      );
+      box-shadow: 0 0 22px rgba(201,164,92,.2);
+      transition: transform 5s cubic-bezier(.12,.75,.12,1);
+    }
+
+    .loyalty-wheel::after {
+      content: "";
+      position: absolute;
+      width: 42px;
+      height: 42px;
+      background: #111;
+      border: 4px solid #e5c477;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%,-50%);
+      z-index: 5;
+    }
+
+    .wheel-label {
+      position: absolute;
+      width: 105px;
+      color: #17120a;
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1.35;
+      text-align: center;
+      z-index: 2;
+    }
+
+    .wheel-label.one {
+      top: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .wheel-label.two {
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #f2dfb5;
+    }
+
+    .wheel-label.three {
+      bottom: 38px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .wheel-label.four {
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #f2dfb5;
+    }
+
+    .loyalty-wheel-pointer {
+      position: absolute;
+      z-index: 10;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 13px solid transparent;
+      border-right: 13px solid transparent;
+      border-top: 25px solid #fff0bd;
+      filter: drop-shadow(0 2px 3px #000);
+    }
+
+    .loyalty-spin-button {
+      background: linear-gradient(135deg, #e5c477, #a77c31);
+      color: #15100a;
+      border: none;
+      border-radius: 30px;
+      padding: 13px 28px;
+      font-size: 16px;
+      font-weight: 900;
+      cursor: pointer;
+      width: 100%;
+      max-width: 280px;
+    }
+
+    .loyalty-spin-button:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+
+    .loyalty-spin-result {
+      color: #e8cd8d;
+      font-size: 16px;
+      font-weight: 900;
+      line-height: 1.8;
+      margin-top: 15px;
+    }
+
+    .loyalty-history {
+      margin-top: 20px;
+      text-align: right;
+      border-top: 1px solid rgba(201,164,92,.25);
+      padding-top: 15px;
+    }
+
+    .loyalty-history h4 {
+      color: #d9b967;
+      margin-bottom: 10px;
+    }
+
+    .loyalty-history-item {
+      padding: 9px;
+      margin: 7px 0;
+      background: rgba(255,255,255,.04);
+      border-radius: 8px;
+      color: #ddd;
+      font-size: 13px;
+    }
+
+    @media(max-width:360px) {
+      .loyalty-wheel-wrap {
+        width: 230px;
+        height: 230px;
+      }
+
+      .wheel-label {
+        font-size: 10px;
+        width: 90px;
+      }
+
+      .loyalty-dot {
+        width: 36px;
+        height: 36px;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+// ========================================
+// LOYALTY CARD RENDER
+// ========================================
+
+function renderLoyaltyCard(phone, customer) {
+  addLoyaltyStyles();
+
+  const result = $("loyaltyResult");
+  if (!result) return;
+
+  const data = getCustomerLoyaltyData(customer);
+
+  const history = Array.isArray(customer?.rewardHistory)
+    ? [...customer.rewardHistory].reverse()
+    : [];
+
+  result.innerHTML = "";
+
+  const card = document.createElement("div");
+  card.className = "loyalty-card-new";
+
+  const brand = document.createElement("div");
+  brand.className = "loyalty-brand";
+  brand.textContent = "FAHD KHALED SALON";
+
+  const title = document.createElement("h3");
+  title.className = "loyalty-card-title";
+  title.textContent = "LOYALTY CARD";
+
+  const stats = document.createElement("div");
+  stats.className = "loyalty-stats";
+
+  const visitsStat = document.createElement("div");
+  visitsStat.className = "loyalty-stat";
+
+  const visitsNumber = document.createElement("strong");
+  visitsNumber.textContent = data.visits;
+
+  const visitsLabel = document.createElement("span");
+  visitsLabel.textContent = "إجمالي الزيارات";
+
+  visitsStat.append(visitsNumber, visitsLabel);
+
+  const spinsStat = document.createElement("div");
+  spinsStat.className = "loyalty-stat";
+
+  const spinsNumber = document.createElement("strong");
+  spinsNumber.textContent = data.availableSpins;
+
+  const spinsLabel = document.createElement("span");
+  spinsLabel.textContent = "لفات مستحقة";
+
+  spinsStat.append(spinsNumber, spinsLabel);
+
+  stats.append(visitsStat, spinsStat);
+
+  const dotsTitle = document.createElement("div");
+  dotsTitle.className = "loyalty-dots-title";
+  dotsTitle.textContent = "اجمع 10 زيارات واكسب لفة حظ";
+
+  const dots = document.createElement("div");
+  dots.className = "loyalty-dots";
+
+  for (let i = 1; i <= 10; i++) {
+    const dot = document.createElement("div");
+    dot.className = "loyalty-dot";
+
+    if (i <= data.progress) {
+      dot.classList.add("active");
+      dot.textContent = "✓";
+    } else {
+      dot.textContent = i;
+    }
+
+    dots.appendChild(dot);
+  }
+
+  const progressText = document.createElement("div");
+  progressText.className = "loyalty-progress-text";
+  progressText.textContent =
+    `${data.progress} من 10 زيارات`;
+
+  const status = document.createElement("div");
+  status.className = "loyalty-reward-status";
+
+  if (data.availableSpins > 0) {
+    status.textContent =
+      `مبروك! عندك ${data.availableSpins} لفة مستحقة. اضغط على العجلة للحصول على جائزتك.`;
+  } else {
+    const remaining = 10 - data.progress;
+
+    status.textContent =
+      remaining === 10
+        ? "ابدأ زياراتك واجمع 10 زيارات لتحصل على لفة مجانية."
+        : `متبقي ${remaining} زيارة للحصول على لفة الحظ القادمة.`;
+  }
+
+  const wheelArea = document.createElement("div");
+  wheelArea.className = "loyalty-wheel-area";
+
+  const wheelTitle = document.createElement("div");
+  wheelTitle.className = "loyalty-wheel-title";
+  wheelTitle.textContent = "عجلة الحظ";
+
+  const wheelDesc = document.createElement("div");
+  wheelDesc.className = "loyalty-wheel-desc";
+  wheelDesc.textContent = "لف العجلة واكسب جائزتك المجانية";
+
+  const wheelWrap = document.createElement("div");
+  wheelWrap.className = "loyalty-wheel-wrap";
+
+  const pointer = document.createElement("div");
+  pointer.className = "loyalty-wheel-pointer";
+
+  const wheel = document.createElement("div");
+  wheel.className = "loyalty-wheel";
+  wheel.id = "customerRewardWheel";
+
+  const labels = [
+    ["one", "قص شعر مجاناً"],
+    ["two", "قص دقن مجاناً"],
+    ["three", "جلسة بشرة كاملة"],
+    ["four", "الباقة الكاملة"]
+  ];
+
+  labels.forEach(([className, text]) => {
+    const label = document.createElement("div");
+    label.className = `wheel-label ${className}`;
+    label.textContent = text;
+    wheel.appendChild(label);
+  });
+
+  wheelWrap.append(pointer, wheel);
+
+  const spinButton = document.createElement("button");
+  spinButton.type = "button";
+  spinButton.className = "loyalty-spin-button";
+  spinButton.id = "loyaltySpinButton";
+
+  spinButton.textContent = data.availableSpins > 0
+    ? "لف عجلة الحظ"
+    : "اجمع 10 زيارات أولاً";
+
+  spinButton.disabled = data.availableSpins <= 0;
+
+  const spinResult = document.createElement("div");
+  spinResult.className = "loyalty-spin-result";
+  spinResult.id = "loyaltySpinResult";
+
+  spinButton.addEventListener("click", () => {
+    spinLoyaltyWheel(phone, spinButton, wheel, spinResult);
+  });
+
+  wheelArea.append(
+    wheelTitle,
+    wheelDesc,
+    wheelWrap,
+    spinButton,
+    spinResult
+  );
+
+  const historyArea = document.createElement("div");
+  historyArea.className = "loyalty-history";
+
+  const historyTitle = document.createElement("h4");
+  historyTitle.textContent = "سجل الجوائز";
+
+  historyArea.appendChild(historyTitle);
+
+  if (!history.length) {
+    const empty = document.createElement("div");
+    empty.className = "loyalty-history-item";
+    empty.textContent = "لسه مفيش جوائز تم الحصول عليها.";
+    historyArea.appendChild(empty);
+  } else {
+    history.slice(0, 20).forEach(item => {
+      const entry = document.createElement("div");
+      entry.className = "loyalty-history-item";
+
+      const reward = document.createElement("div");
+      reward.textContent = item.reward || "جائزة";
+
+      const date = document.createElement("small");
+
+      let dateText = "";
+
+      if (item.createdAt?.toDate) {
+        dateText = item.createdAt.toDate().toLocaleDateString("ar-EG");
+      } else if (item.date) {
+        dateText = item.date;
+      }
+
+      date.textContent = dateText
+        ? `تاريخ الجائزة: ${dateText}`
+        : "تاريخ الجائزة غير متاح";
+
+      entry.append(reward, date);
+      historyArea.appendChild(entry);
+    });
+  }
+
+  card.append(
+    brand,
+    title,
+    stats,
+    dotsTitle,
+    dots,
+    progressText,
+    status,
+    wheelArea,
+    historyArea
+  );
+
+  result.appendChild(card);
+  result.hidden = false;
+}
+
+// ========================================
+// SPIN LOYALTY WHEEL
+// ========================================
+
+async function spinLoyaltyWheel(
+  phone,
+  button,
+  wheel,
+  resultElement
+) {
+  if (loyaltySpinning) return;
+
+  if (!validPhone(phone)) {
+    showMessage("loyaltyMessage", "رقم الهاتف غير صحيح.", "#ff7777");
+    return;
+  }
+
+  loyaltySpinning = true;
+  button.disabled = true;
+  button.textContent = "جاري تدوير العجلة...";
+
+  resultElement.textContent = "";
+
+  // اختيار الجائزة قبل المعاملة حتى لا تتغير عند إعادة المحاولة
+  const rewardIndex = Math.floor(
+    Math.random() * LOYALTY_REWARDS.length
+  );
+
+  const reward = LOYALTY_REWARDS[rewardIndex];
+
+  try {
+    const customerRef = doc(db, "customers", phone);
+
+    let visitsAtWin = 0;
+
+    await runTransaction(db, async transaction => {
+      const customerSnapshot = await transaction.get(customerRef);
+
+      if (!customerSnapshot.exists()) {
+        throw new Error("بيانات العميل غير موجودة.");
+      }
+
+      const customer = customerSnapshot.data();
+
+      const loyalty = getCustomerLoyaltyData(customer);
+
+      if (loyalty.availableSpins <= 0) {
+        throw new Error("ليس لديك لفات مستحقة حالياً.");
+      }
+
+      visitsAtWin = loyalty.visits;
+
+      const oldHistory = Array.isArray(customer.rewardHistory)
+        ? customer.rewardHistory
+        : [];
+
+      const newHistory = [
+        ...oldHistory,
+        {
+          reward,
+          rewardIndex,
+          visitsAtWin,
+          date: localDate(new Date()),
+          createdAt: new Date().toISOString()
+        }
+      ];
+
+      transaction.set(customerRef, {
+        spinsUsed: loyalty.spinsUsed + 1,
+        rewardHistory: newHistory,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    });
+
+    // تحديد مكان الجائزة الفائزة على العجلة
+    // ترتيب القطاعات يبدأ من أعلى العجلة باتجاه عقارب الساعة
+    const sectorCenter = rewardIndex * 90 + 45;
+
+    const targetRotation =
+      360 * 6 + (360 - sectorCenter);
+
+    wheel.style.transition = "none";
+    wheel.style.transform = "rotate(0deg)";
+
+    void wheel.offsetWidth;
+
+    wheel.style.transition =
+      "transform 5s cubic-bezier(.12,.75,.12,1)";
+
+    wheel.style.transform =
+      `rotate(${targetRotation}deg)`;
+
+    await new Promise(resolve => setTimeout(resolve, 5200));
+
+    resultElement.textContent =
+      `مبروك! جائزتك هي: ${reward}`;
+
+    showMessage(
+      "loyaltyMessage",
+      "تم تسجيل جائزتك بنجاح.",
+      "#75e49a"
+    );
+
+    // تحديث الكارت بعد نجاح تسجيل الجائزة
+    try {
+      const updatedSnapshot = await getDoc(customerRef);
+
+      if (updatedSnapshot.exists()) {
+        renderLoyaltyCard(phone, updatedSnapshot.data());
+      }
+    } catch (refreshError) {
+      console.error("Loyalty refresh error:", refreshError);
+    }
+
+  } catch (error) {
+    console.error(error);
+
+    resultElement.textContent = "";
+
+    showMessage(
+      "loyaltyMessage",
+      "تعذر تدوير العجلة: " + error.message,
+      "#ff7777"
+    );
+
+    try {
+      const customerSnapshot = await getDoc(
+        doc(db, "customers", phone)
+      );
+
+      if (customerSnapshot.exists()) {
+        renderLoyaltyCard(phone, customerSnapshot.data());
+      }
+    } catch (refreshError) {
+      console.error(refreshError);
+    }
+
+  } finally {
+    loyaltySpinning = false;
+  }
+}
+
+// ========================================
+// CUSTOMER LOYALTY LOOKUP
 // ========================================
 
 $("loyaltyForm")?.addEventListener("submit", async event => {
@@ -1168,38 +1874,43 @@ $("loyaltyForm")?.addEventListener("submit", async event => {
     return;
   }
 
+  if (loyaltySpinning) return;
+
   button.disabled = true;
   button.textContent = "جاري البحث...";
 
   showMessage("loyaltyMessage", "");
   $("loyaltyResult").hidden = true;
 
+  loyaltyCurrentPhone = phone;
+
   try {
     const customerRef = doc(db, "customers", phone);
     const customerSnapshot = await getDoc(customerRef);
 
-    const visits = customerSnapshot.exists()
-      ? Number(customerSnapshot.data().visits || 0)
-      : 0;
+    if (!customerSnapshot.exists()) {
+      renderLoyaltyCard(phone, {
+        phone,
+        visits: 0,
+        spinsUsed: 0,
+        rewardHistory: []
+      });
 
-    const rewards = Math.floor(visits / 5);
-    const remaining = 5 - (visits % 5);
+      showMessage(
+        "loyaltyMessage",
+        "لسه مفيش زيارات مسجلة بالرقم ده.",
+        "#d9b967"
+      );
 
-    $("loyaltyVisits").textContent = visits;
-    $("loyaltyRewards").textContent = rewards;
+    } else {
+      renderLoyaltyCard(phone, customerSnapshot.data());
 
-    $("loyaltyNextReward").textContent =
-      visits >= 5 && visits % 5 === 0
-        ? "مبروك! عندك خصم 50% مستحق على تنظيف البشرة."
-        : `متبقي ${remaining} زيارة للحصول على المكافأة القادمة.`;
-
-    $("loyaltyResult").hidden = false;
-
-    showMessage(
-      "loyaltyMessage",
-      "تم الاستعلام بنجاح.",
-      "#75e49a"
-    );
+      showMessage(
+        "loyaltyMessage",
+        "تم الاستعلام بنجاح.",
+        "#75e49a"
+      );
+    }
 
   } catch (error) {
     console.error(error);
