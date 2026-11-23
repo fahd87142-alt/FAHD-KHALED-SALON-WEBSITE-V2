@@ -906,3 +906,76 @@ footer p {
   }
 
 }
+
+/* ========================================
+   FAHD KHALED GOLD LOGO
+======================================== */
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.brand-razor {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.3;
+}
+
+.logo .logo-text h2 {
+  color: var(--gold);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  white-space: nowrap;
+}
+
+.logo .logo-text small {
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 5px;
+  white-space: nowrap;
+}
+
+.footer-logo {
+  justify-content: center;
+}
+
+@media (max-width: 750px) {
+
+  .header .logo {
+    gap: 7px;
+  }
+
+  .header .brand-razor {
+    width: 39px;
+    height: 39px;
+  }
+
+  .header .logo-text h2 {
+    font-size: 15px;
+    letter-spacing: 1px;
+  }
+
+  .header .logo-text small {
+    font-size: 9px;
+    letter-spacing: 4px;
+  }
+
+  .footer-logo .brand-razor {
+    width: 45px;
+    height: 45px;
+  }
+
+}
