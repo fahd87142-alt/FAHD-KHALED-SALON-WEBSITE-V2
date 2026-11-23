@@ -2,10 +2,13 @@
 
 :root {
   --gold: #c9a45c;
+  --gold-light: #e5c477;
   --black: #101010;
   --dark: #191919;
   --white: #f7f7f7;
   --gray: #aaa;
+  --green: #75e49a;
+  --red: #ff7777;
 }
 
 * {
@@ -16,6 +19,7 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 90px;
 }
 
 body {
@@ -25,12 +29,25 @@ body {
   line-height: 1.8;
 }
 
-button, input, select, textarea {
+button,
+input,
+select,
+textarea {
   font: inherit;
 }
 
-button, a {
+button,
+a {
   -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
 }
 
 a {
@@ -193,6 +210,10 @@ a {
   margin-top: 10px;
 }
 
+/* ========================================
+   BOOKING
+======================================== */
+
 .booking-section {
   background: #171717;
 }
@@ -224,11 +245,14 @@ a {
   border: 1px solid #444;
   border-radius: 5px;
   outline: none;
+  transition: border-color .25s;
 }
 
 #bookingForm input:focus,
 #bookingForm select:focus,
-#bookingForm textarea:focus {
+#bookingForm textarea:focus,
+#loyaltyForm input:focus,
+#adminPanel input:focus {
   border-color: var(--gold);
 }
 
@@ -250,6 +274,12 @@ a {
   border-radius: 5px;
   font-size: 14px;
   margin: 0 !important;
+  transition: .2s;
+}
+
+.service-choices label:has(input:checked) {
+  border-color: var(--gold);
+  background: #242016;
 }
 
 .service-choices input {
@@ -306,8 +336,68 @@ a {
   color: #7ee49e;
 }
 
+/* ========================================
+   VIP LOYALTY SECTION
+======================================== */
+
 .loyalty-section {
-  background: #101010;
+  background:
+    radial-gradient(ellipse at top, #292216 0%, #101010 48%, #080808 100%);
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid rgba(201,164,92,.2);
+  border-bottom: 1px solid rgba(201,164,92,.2);
+}
+
+.loyalty-section > .gold-text {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-weight: 800;
+}
+
+.loyalty-section > h2 {
+  font-size: 38px;
+  color: var(--gold-light);
+}
+
+.loyalty-intro {
+  max-width: 650px;
+  margin: 0 auto 25px;
+  padding: 22px;
+  background: linear-gradient(145deg, #201c13, #121212);
+  border: 1px solid rgba(201,164,92,.35);
+  border-radius: 14px;
+  box-shadow: 0 8px 25px rgba(0,0,0,.2);
+}
+
+.loyalty-intro h3 {
+  color: var(--gold-light);
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.loyalty-intro p {
+  color: #bbb;
+  font-size: 14px;
+}
+
+#loyaltyForm {
+  max-width: 500px;
+  padding: 22px;
+  background: rgba(25,25,25,.85);
+  border: 1px solid #393124;
+  border-radius: 13px;
+}
+
+#loyaltyForm label {
+  margin-top: 0;
+}
+
+#loyaltyForm input {
+  text-align: center;
+  direction: ltr;
+  font-size: 17px;
+  letter-spacing: 1px;
 }
 
 #loyaltyForm .main-btn {
@@ -315,12 +405,28 @@ a {
   margin-top: 15px;
 }
 
-#loyaltyResult {
-  margin-top: 20px;
-  padding: 20px;
-  background: #202020;
-  border-radius: 8px;
+#loyaltyMessage {
+  max-width: 600px;
+  margin: 15px auto;
+  font-weight: 700;
 }
+
+#loyaltyResult {
+  max-width: 650px;
+  margin: 25px auto 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 12px;
+  text-align: center;
+}
+
+#loyaltyResult:empty {
+  display: none;
+}
+
+/* ========================================
+   CONTACT
+======================================== */
 
 .contact-section {
   background: #191919;
@@ -330,6 +436,22 @@ a {
   margin: 15px 0 25px;
   color: #ccc;
 }
+
+.contact-links {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.contact-links .main-btn {
+  min-width: 145px;
+}
+
+/* ========================================
+   FOOTER
+======================================== */
 
 footer {
   padding: 40px 15px;
@@ -355,12 +477,17 @@ footer p {
   color: #aaa;
   padding: 8px 20px;
   border-radius: 5px;
+  transition: .3s;
 }
 
 .admin-access:hover {
   color: var(--gold);
   border-color: var(--gold);
 }
+
+/* ========================================
+   ADMIN PANEL
+======================================== */
 
 .admin-panel {
   position: fixed;
@@ -415,6 +542,7 @@ footer p {
 }
 
 /* عنوان لوحة الإدارة */
+
 .admin-heading {
   color: var(--gold);
   text-align: center;
@@ -423,6 +551,7 @@ footer p {
 }
 
 /* شريط الأدوات */
+
 .admin-toolbar {
   display: flex;
   align-items: center;
@@ -479,6 +608,7 @@ footer p {
 }
 
 /* قائمة الحجوزات */
+
 #bookingsList {
   display: flex;
   flex-direction: column;
@@ -487,6 +617,7 @@ footer p {
 }
 
 /* مجموعة كل يوم */
+
 .booking-day-section {
   background: #1b1b1b;
   border: 1px solid #45402f;
@@ -506,6 +637,7 @@ footer p {
 }
 
 /* الجدول */
+
 .booking-table-wrapper {
   width: 100%;
   overflow-x: auto;
@@ -556,9 +688,12 @@ footer p {
 
 .booking-extra-row td {
   background: #191919;
+  color: #bbb;
+  white-space: normal;
 }
 
 /* أزرار الحضور والغياب */
+
 .attendance-cell {
   min-width: 105px;
 }
@@ -610,6 +745,7 @@ footer p {
 }
 
 /* كارت احتياطي */
+
 .booking-card {
   background: #111;
   border: 1px solid #444;
@@ -617,6 +753,10 @@ footer p {
   padding: 15px;
   text-align: right;
 }
+
+/* ========================================
+   GENERAL
+======================================== */
 
 #siteError {
   color: #ff7777;
@@ -628,8 +768,12 @@ footer p {
   display: none !important;
 }
 
-/* الموبايل */
+/* ========================================
+   MOBILE
+======================================== */
+
 @media (max-width: 750px) {
+
   .header {
     padding: 12px 5%;
   }
@@ -682,6 +826,35 @@ footer p {
     font-size: 28px;
   }
 
+  .loyalty-section > h2 {
+    font-size: 32px;
+  }
+
+  .loyalty-intro {
+    padding: 17px 12px;
+  }
+
+  .loyalty-intro h3 {
+    font-size: 18px;
+  }
+
+  #loyaltyForm {
+    padding: 17px 13px;
+  }
+
+  #loyaltyResult {
+    margin-top: 20px;
+  }
+
+  .contact-links {
+    flex-direction: column;
+  }
+
+  .contact-links .main-btn {
+    width: 100%;
+    max-width: 350px;
+  }
+
   .admin-panel {
     padding: 7px;
   }
@@ -723,7 +896,13 @@ footer p {
 }
 
 @media (max-width: 380px) {
+
   .services-grid {
     grid-template-columns: 1fr;
   }
+
+  .loyalty-section > h2 {
+    font-size: 27px;
+  }
+
 }
