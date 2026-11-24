@@ -1,6 +1,7 @@
 // ========================================
 // FAHD KHALED SALON
 // BOOKING + ADMIN + LOYALTY + WHEEL + ATTENDANCE
+// + LIVE BOOKING ALERTS + WHATSAPP
 // ========================================
 
 import { initializeApp } from
@@ -12,6 +13,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
   where,
   runTransaction,
@@ -42,8 +44,9 @@ const firebaseConfig = {
   appId: "1:999874398926:web:60a841f71a579d1b7e5e9f"
 };
 
-// تم تصحيح UID الإدارة
 const ADMIN_UID = "n11bT3BtMaXwCWv2iYjW1sQ61Hv2";
+
+const SALON_WHATSAPP = "201094044076";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -143,6 +146,36 @@ function getArabicDay(dateString) {
 
 function validPhone(phone) {
   return /^01[0125][0-9]{8}$/.test(phone);
+}
+
+// ========================================
+// WHATSAPP BOOKING MESSAGE
+// ========================================
+
+function sendBookingWhatsApp(booking) {
+  const message = [
+    "🔔 حجز جديد - FAHD KHALED SALON",
+    "━━━━━━━━━━━━━━━━",
+    `الاسم: ${booking.name || "-"}`,
+    `رقم العميل: ${booking.phone || "-"}`,
+    `الحلاق: ${booking.barber || "-"}`,
+    `الخدمة: ${booking.service || "-"}`,
+    `اليوم: ${getArabicDay(booking.date)}`,
+    `التاريخ: ${formatDate(booking.date)}`,
+    `الوقت: ${formatTime(booking.time)}`,
+    `الإجمالي: ${Number(booking.total || 0)} جنيه`,
+    `ملاحظات: ${booking.notes || "لا توجد"}`,
+    "━━━━━━━━━━━━━━━━",
+    "FAHD KHALED SALON"
+  ].join("\n");
+
+  const whatsappURL =
+    "https://wa.me/" +
+    SALON_WHATSAPP +
+    "?text=" +
+    encodeURIComponent(message);
+
+  window.open(whatsappURL, "_blank");
 }
 
 // ========================================
@@ -584,8 +617,58 @@ $("adminLoginForm")?.addEventListener("submit", async event => {
 });
 
 // ========================================
-// ADMIN AUTH
+// ADMIN AUTH + LIVE BOOKING ALERTS
 // ========================================
+
+let adminBookingsUnsubscribe = null;
+let firstBookingsSnapshot = true;
+
+function startAdminBookingListener() {
+  if (adminBookingsUnsubscribe) {
+    adminBookingsUnsubscribe();
+  }
+
+  firstBookingsSnapshot = true;
+
+  adminBookingsUnsubscribe = onSnapshot(
+    collection(db, "bookings"),
+    snapshot => {
+      // أول تحميل لا يعتبر حجوزات جديدة
+      if (firstBookingsSnapshot) {
+        firstBookingsSnapshot = false;
+        loadAdminBookings();
+        return;
+      }
+
+      const newBookings = snapshot.docChanges().filter(
+        change => change.type === "added"
+      );
+
+      if (newBookings.length > 0) {
+        newBookings.forEach(change => {
+          const booking = change.doc.data();
+
+          showMessage(
+            "adminStatus",
+            `🔔 حجز جديد! ${booking.name || ""} - ${booking.phone || ""}`,
+            "#75e49a"
+          );
+        });
+
+        loadAdminBookings();
+      }
+    },
+    error => {
+      console.error("Bookings listener error:", error);
+
+      showMessage(
+        "adminStatus",
+        "تعذر متابعة الحجوزات الجديدة: " + error.message,
+        "#ff7777"
+      );
+    }
+  );
+}
 
 onAuthStateChanged(auth, async user => {
   if (user && user.uid === ADMIN_UID) {
@@ -594,9 +677,14 @@ onAuthStateChanged(auth, async user => {
 
     showMessage("adminStatus", "تم تسجيل الدخول بنجاح.");
 
-    await loadAdminBookings();
+    startAdminBookingListener();
 
   } else {
+    if (adminBookingsUnsubscribe) {
+      adminBookingsUnsubscribe();
+      adminBookingsUnsubscribe = null;
+    }
+
     $("adminLoginForm").hidden = false;
     $("adminDashboard").hidden = true;
 
@@ -1017,6 +1105,7 @@ async function loadAdminBookings() {
         "الوقت",
         "الخدمة",
         "إجمالي السعر",
+        "واتساب",
         "الحضور / الغياب"
       ].forEach(title => {
         const th = document.createElement("th");
@@ -1048,6 +1137,39 @@ async function loadAdminBookings() {
           td.textContent = value;
           row.appendChild(td);
         });
+
+        // ========================================
+        // WHATSAPP BUTTON
+        // ========================================
+
+        const whatsappCell = document.createElement("td");
+
+        const whatsappButton = document.createElement("button");
+        whatsappButton.type = "button";
+        whatsappButton.textContent = "واتساب";
+        whatsappButton.className = "whatsapp-booking-button";
+
+        whatsappButton.style.cssText = `
+          background: #25D366;
+          color: #fff;
+          border: none;
+          border-radius: 8px;
+          padding: 9px 13px;
+          font-weight: bold;
+          cursor: pointer;
+          white-space: nowrap;
+        `;
+
+        whatsappButton.addEventListener("click", () => {
+          sendBookingWhatsApp(booking);
+        });
+
+        whatsappCell.appendChild(whatsappButton);
+        row.appendChild(whatsappCell);
+
+        // ========================================
+        // ATTENDANCE BUTTONS
+        // ========================================
 
         const attendanceCell = document.createElement("td");
         attendanceCell.className = "attendance-cell";
@@ -1107,7 +1229,7 @@ async function loadAdminBookings() {
         extraRow.className = "booking-extra-row";
 
         const extraCell = document.createElement("td");
-        extraCell.colSpan = 8;
+        extraCell.colSpan = 9;
 
         const visits = customerMap.get(booking.phone) || 0;
 
@@ -1387,28 +1509,24 @@ function addLoyaltyStyles() {
       z-index: 2;
     }
 
-    /* القطاع الأول: أعلى اليمين */
     .wheel-label.one {
       top: 24%;
       right: 7%;
       color: #17120a;
     }
 
-    /* القطاع الثاني: أسفل اليمين */
     .wheel-label.two {
       bottom: 24%;
       right: 7%;
       color: #f2dfb5;
     }
 
-    /* القطاع الثالث: أسفل اليسار */
     .wheel-label.three {
       bottom: 24%;
       left: 7%;
       color: #17120a;
     }
 
-    /* القطاع الرابع: أعلى اليسار */
     .wheel-label.four {
       top: 24%;
       left: 7%;
@@ -1646,7 +1764,6 @@ function renderLoyaltyCard(phone, customer, spinMessage = "") {
   spinResult.className = "loyalty-spin-result";
   spinResult.id = "loyaltySpinResult";
 
-  // الاحتفاظ برسالة الفوز بعد إعادة بناء الكارت
   spinResult.textContent = spinMessage;
 
   spinButton.addEventListener("click", () => {
@@ -1790,7 +1907,6 @@ async function spinLoyaltyWheel(
       }, { merge: true });
     });
 
-    // حساب القطاع الفائز بالنسبة للمؤشر الثابت أعلى العجلة
     const sectorCenter = rewardIndex * 90 + 45;
 
     const targetRotation =
@@ -1817,7 +1933,6 @@ async function spinLoyaltyWheel(
       "#75e49a"
     );
 
-    // تحديث بيانات الكارت مع الاحتفاظ برسالة الفوز
     try {
       const updatedSnapshot = await getDoc(customerRef);
 
